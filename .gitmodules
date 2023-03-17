@@ -1,0 +1,3 @@
+[submodule "components/MPU6050"]
+	path = components/MPU6050
+	url = https://bitbucket.org/aero_pacio/mpu6050component/src/master/
