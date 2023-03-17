@@ -1,3 +1,6 @@
 [submodule "components/MPU6050"]
 	path = components/MPU6050
 	url = https://bitbucket.org/aero_pacio/mpu6050component/src/master/
+[submodule "components/TFMINI"]
+	path = components/TFMINI
+	url = https://bitbucket.org/aero_pacio/tfminicomponent/src/master/
