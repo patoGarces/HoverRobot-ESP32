@@ -4,3 +4,6 @@
 [submodule "components/TFMINI"]
 	path = components/TFMINI
 	url = https://bitbucket.org/aero_pacio/tfminicomponent/src/master/
+[submodule "components/CAN_COMM"]
+	path = components/CAN_COMM
+	url = https://bitbucket.org/aero_pacio/can_comms_component/src/master/
