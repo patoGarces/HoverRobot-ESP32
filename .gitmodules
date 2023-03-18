@@ -7,3 +7,6 @@
 [submodule "components/CAN_COMM"]
 	path = components/CAN_COMM
 	url = https://bitbucket.org/aero_pacio/can_comms_component/src/master/
+[submodule "components/BT_CLASSIC"]
+	path = components/BT_CLASSIC
+	url = https://bitbucket.org/aero_pacio/bt_classic_component/src/master/

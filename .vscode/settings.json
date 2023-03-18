@@ -3,6 +3,13 @@
         "mpu6050.h": "c",
         "task.h": "c",
         "stdio.h": "c",
-        "tfmini.h": "c"
-    }
+        "tfmini.h": "c",
+        "bt_classic.h": "c",
+        "esp_spp_api.h": "c",
+        "nvs_flash.h": "c",
+        "can_comms.h": "c",
+        "freertosconfig.h": "c",
+        "spp_task.h": "c"
+    },
+    "idf.portWin": "COM8"
 }
