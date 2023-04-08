@@ -10,6 +10,7 @@
 #include "../components/CAN_COMM/include/CAN_COMMS.h"
 #include "../components/BT_CLASSIC/include/BT_CLASSIC.h"
 
+#define PIN_LED 27
 
 #define GPIO_CAN_TX     14
 #define GPIO_CAN_RX     12
@@ -18,6 +19,9 @@
 void app_main() {
     float angleX = 0.00;
     uint16_t distance = 0;
+
+    gpio_set_direction(PIN_LED , GPIO_MODE_OUTPUT);
+    gpio_set_level(PIN_LED, 0);
 
     // mpu_init();
     // tfMiniInit();
@@ -29,7 +33,10 @@ void app_main() {
         // angleX = getAngle(AXIS_ANGLE_X);
         // distance = tfMiniGetDist();
 
-        printf("angleX: %f  , distance: %d\n",angleX,distance);
+        // printf("angleX: %f  , distance: %d\n",angleX,distance);
+        gpio_set_level(PIN_LED,1);
+        vTaskDelay(pdMS_TO_TICKS(100));
+        gpio_set_level(PIN_LED,0);
         vTaskDelay(pdMS_TO_TICKS(100));
     
     }
