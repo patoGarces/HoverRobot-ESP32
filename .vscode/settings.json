@@ -17,7 +17,8 @@
         "sstream": "c",
         "streambuf": "c",
         "esp_vfs.h": "c",
-        "unistd.h": "c"
+        "unistd.h": "c",
+        "freertos.h": "c"
     },
     "idf.portWin": "COM8",
     "idf.adapterTargetName": "esp32"

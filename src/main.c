@@ -17,8 +17,8 @@
 #define UART_PORT_CAN   UART_NUM_1
 
 void app_main() {
-    float angleX = 0.00;
-    uint16_t distance = 0;
+    // float angleX = 0.00;
+    // uint16_t distance = 0;
 
     gpio_set_direction(PIN_LED , GPIO_MODE_OUTPUT);
     gpio_set_level(PIN_LED, 0);
@@ -34,6 +34,9 @@ void app_main() {
         // distance = tfMiniGetDist();
 
         // printf("angleX: %f  , distance: %d\n",angleX,distance);
+        // if(btIsConnected()){
+            // btSendAngle(12.25,45.50,457.780);
+        // }
         gpio_set_level(PIN_LED,1);
         vTaskDelay(pdMS_TO_TICKS(100));
         gpio_set_level(PIN_LED,0);
