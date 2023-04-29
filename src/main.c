@@ -9,6 +9,7 @@
 #include "../components/TFMINI/include/tfMini.h"
 #include "../components/CAN_COMM/include/CAN_COMMS.h"
 #include "../components/BT_CLASSIC/include/BT_CLASSIC.h"
+#include "comms.h"
 
 #define PIN_LED 27
 
@@ -34,9 +35,12 @@ void app_main() {
         // distance = tfMiniGetDist();
 
         // printf("angleX: %f  , distance: %d\n",angleX,distance);
-        // if(btIsConnected()){
+        if(btIsConnected()){
             // btSendAngle(12.25,45.50,457.780);
-        // }
+            // btSendData(0,0,0);
+
+            // sendDato(16);
+        }
         gpio_set_level(PIN_LED,1);
         vTaskDelay(pdMS_TO_TICKS(100));
         gpio_set_level(PIN_LED,0);
