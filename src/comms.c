@@ -5,7 +5,7 @@
 
 #include "comms.h"
 
-#define HEADER_COMMS 0xABC0
+
 
 QueueHandle_t queueReceive;
 QueueHandle_t queueSend;
@@ -45,28 +45,6 @@ void spp_read_handle(void * param)
 
             if(pidSettings.checksum == (pidSettings.header ^ pidSettings.kp ^ pidSettings.ki ^ pidSettings.kd)){
                 printf("KP = %ld, KI = %ld, KD = %ld, checksum: %ld\n", pidSettings.kp,pidSettings.ki,pidSettings.kd,pidSettings.checksum);
-                
-                status_robot_t status={
-                    .header = HEADER_COMMS,
-                    .bat_voltage = 11,
-                    .bat_percent = 51,
-                    .batTemp = 255,
-                    .temp_uc_control = 115,
-                    .temp_uc_main = 266,
-                    .speedR = 0,
-                    .speedL = 0,
-                    .pitch = 10664,
-                    .roll = 1198456,
-                    .yaw = -65564,
-                    .centerAngle = 0,
-                    .P = pidSettings.kp,
-                    .I = pidSettings.ki,
-                    .D = pidSettings.kd,   
-                    .orden_code = 15,
-                    .error_code = 1,//ERROR_CODE_INIT,
-                    .checksum = 0
-                };
-                sendDato(status);
             }
 
         }
@@ -78,4 +56,16 @@ void spp_read_handle(void * param)
 void sendDato(status_robot_t status){
     printf("agrego dato a enviar a la cola\n");
     xQueueSend(queueSend,( void * ) &status, 0);
+}
+
+void btSendData(float x,float y, uint16_t motores){
+    // char spp_data[256];
+    // sprintf(spp_data, "X: %f Y: %f, Motores: %d\n", x,y,motores);
+    // esp_spp_write(handleSpp, strlen(spp_data), (uint8_t *)spp_data);
+}
+
+void btSendAngle(float ejeX,float ejeY,float ejeZ){
+    // char spp_data[256];
+    // sprintf(spp_data,"Angle X: %f\fAngle Y: %f\fAngle Z: %f\f\n", ejeX, ejeY, ejeZ);
+    // esp_spp_write(handleSpp, strlen(spp_data), (uint8_t *)spp_data);
 }

@@ -21,6 +21,8 @@ void app_main() {
     // float angleX = 0.00;
     // uint16_t distance = 0;
 
+    uint8_t cont1=0,cont2=0,cont3=0,cont4=0;
+
     gpio_set_direction(PIN_LED , GPIO_MODE_OUTPUT);
     gpio_set_level(PIN_LED, 0);
 
@@ -39,7 +41,40 @@ void app_main() {
             // btSendAngle(12.25,45.50,457.780);
             // btSendData(0,0,0);
 
-            // sendDato(16);
+            cont1++;
+            if(cont1>100){
+                cont1 =0;
+            }
+
+            cont2++;
+            if(cont2>4){
+                cont2 =0;
+            }
+
+            cont3 = !cont3;
+            status_robot_t status={
+                    .header = HEADER_COMMS,
+                    .bat_voltage = 10,//cont1*10,
+                    .bat_percent = 11,//cont1,
+                    // .is_charging = 12,//cont3,
+                    .batTemp = 13,//100-cont1,
+                    .temp_uc_control = 14,//cont1,
+                    .temp_uc_main = 15,//100-cont1,
+                    .speedR = 16,
+                    .speedL = 16,
+                    .pitch = 10234,
+                    .roll = 10235,
+                    .yaw = 10236,
+                    .centerAngle = 10237,
+                    .P = 10,
+                    .I = 20,
+                    .D = 30,   
+                    .orden_code = 15,
+                    .error_code = 16,//cont2,//ERROR_CODE_INIT,
+                    .checksum = 0
+                };
+                sendDato(status);
+                vTaskDelay(pdMS_TO_TICKS(1000));
         }
         gpio_set_level(PIN_LED,1);
         vTaskDelay(pdMS_TO_TICKS(100));

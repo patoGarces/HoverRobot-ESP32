@@ -4,6 +4,8 @@
 #include "stdio.h"
 
 
+#define HEADER_COMMS 0xABC0
+
  typedef struct{
     uint32_t header;
     uint32_t kp;
@@ -16,6 +18,7 @@ typedef struct{
     uint16_t header;
     uint16_t bat_voltage;
     uint16_t bat_percent;
+    // uint16_t is_charging;
     uint16_t batTemp;
     uint16_t temp_uc_control;
     uint16_t temp_uc_main;
@@ -60,4 +63,6 @@ void spp_wr_task_shut_down(void);
 void spp_wr_task_start_up(spp_wr_task_cb_t p_cback, int fd);
 void sendDato(status_robot_t status);
 
+void btSendData(float x,float y, uint16_t motores);
+void btSendAngle(float ejeX,float ejeY,float ejeZ);
 #endif
