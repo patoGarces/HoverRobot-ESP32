@@ -13,22 +13,32 @@
 } pidSettings_t;
 
 typedef struct{
+    uint16_t header;
     uint16_t bat_voltage;
     uint16_t bat_percent;
+    uint16_t batTemp;
     uint16_t temp_uc_control;
     uint16_t temp_uc_main;
     int16_t speedR;
     int16_t speedL;
-    uint16_t pitch;
-    uint16_t roll;
-    uint16_t yaw;
-    uint16_t centerAngle;
+    int32_t  pitch;
+    int32_t  roll;
+    int32_t  yaw;
+    int32_t  centerAngle;
     uint16_t P;
     uint16_t I;
     uint16_t D;
-    uint8_t orden_code;
-    uint8_t error_code;
+    uint16_t orden_code;
+    uint16_t error_code;
+    uint16_t checksum;
 }status_robot_t;
+
+// enum{
+//     ERROR_CODE_INIT,
+//     ERROR_CODE_NORMAL,
+//     ERROR_CODE_ERROR,
+//     ERROR_CODE_UNKNOWN
+// }error_code_enum;
 
 typedef struct{
     uint16_t P;

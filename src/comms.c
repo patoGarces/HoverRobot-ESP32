@@ -5,6 +5,8 @@
 
 #include "comms.h"
 
+#define HEADER_COMMS 0xABC0
+
 QueueHandle_t queueReceive;
 QueueHandle_t queueSend;
 
@@ -45,21 +47,24 @@ void spp_read_handle(void * param)
                 printf("KP = %ld, KI = %ld, KD = %ld, checksum: %ld\n", pidSettings.kp,pidSettings.ki,pidSettings.kd,pidSettings.checksum);
                 
                 status_robot_t status={
+                    .header = HEADER_COMMS,
                     .bat_voltage = 11,
                     .bat_percent = 51,
-                    .temp_uc_control = 25,
-                    .temp_uc_main = 26,
-                    .speedR = 100,
-                    .speedL = -100,
-                    .pitch = 10,
-                    .roll = 11,
-                    .yaw = 12,
+                    .batTemp = 255,
+                    .temp_uc_control = 115,
+                    .temp_uc_main = 266,
+                    .speedR = 0,
+                    .speedL = 0,
+                    .pitch = 10664,
+                    .roll = 1198456,
+                    .yaw = -65564,
+                    .centerAngle = 0,
                     .P = pidSettings.kp,
                     .I = pidSettings.ki,
-                    .D = pidSettings.kd,
-                    .centerAngle = 0,
-                    .orden_code = 0xf0,
-                    .error_code = 0xf1
+                    .D = pidSettings.kd,   
+                    .orden_code = 15,
+                    .error_code = 1,//ERROR_CODE_INIT,
+                    .checksum = 0
                 };
                 sendDato(status);
             }
