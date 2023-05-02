@@ -54,7 +54,7 @@ void spp_read_handle(void * param)
 }
 
 void sendDato(status_robot_t status){
-    printf("agrego dato a enviar a la cola\n");
+    // printf("agrego dato a enviar a la cola\n");
     xQueueSend(queueSend,( void * ) &status, 0);
 }
 
