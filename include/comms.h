@@ -24,10 +24,10 @@ typedef struct{
     uint16_t temp_uc_main;
     int16_t speedR;
     int16_t speedL;
-    int32_t  pitch;
-    int32_t  roll;
-    int32_t  yaw;
-    int32_t  centerAngle;
+    float   pitch;
+    float   roll;
+    float   yaw;
+    float   centerAngle;
     uint16_t P;
     uint16_t I;
     uint16_t D;
@@ -61,8 +61,5 @@ typedef void (* spp_wr_task_cb_t) (void *fd);
 void spp_read_handle(void * param);
 void spp_wr_task_shut_down(void);
 void spp_wr_task_start_up(spp_wr_task_cb_t p_cback, int fd);
-void sendDato(status_robot_t status);
-
-void btSendData(float x,float y, uint16_t motores);
-void btSendAngle(float ejeX,float ejeY,float ejeZ);
+void sendStatus(status_robot_t status);
 #endif

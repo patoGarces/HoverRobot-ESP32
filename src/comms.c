@@ -5,7 +5,7 @@
 
 #include "comms.h"
 
-
+#define COMMS_CORE  0
 
 QueueHandle_t queueReceive;
 QueueHandle_t queueSend;
@@ -13,7 +13,7 @@ QueueHandle_t queueSend;
 
 void spp_wr_task_start_up(spp_wr_task_cb_t p_cback, int fd)
 {
-    xTaskCreate(p_cback, "write_read", 2048, (void *)fd, 5, NULL);
+    xTaskCreatePinnedToCore(p_cback, "write_read", 2048, (void *)fd, 5, NULL,COMMS_CORE);
 }
 void spp_wr_task_shut_down(void)
 {
@@ -53,19 +53,6 @@ void spp_read_handle(void * param)
     spp_wr_task_shut_down();
 }
 
-void sendDato(status_robot_t status){
-    // printf("agrego dato a enviar a la cola\n");
+void sendStatus(status_robot_t status){
     xQueueSend(queueSend,( void * ) &status, 0);
-}
-
-void btSendData(float x,float y, uint16_t motores){
-    // char spp_data[256];
-    // sprintf(spp_data, "X: %f Y: %f, Motores: %d\n", x,y,motores);
-    // esp_spp_write(handleSpp, strlen(spp_data), (uint8_t *)spp_data);
-}
-
-void btSendAngle(float ejeX,float ejeY,float ejeZ){
-    // char spp_data[256];
-    // sprintf(spp_data,"Angle X: %f\fAngle Y: %f\fAngle Z: %f\f\n", ejeX, ejeY, ejeZ);
-    // esp_spp_write(handleSpp, strlen(spp_data), (uint8_t *)spp_data);
 }
