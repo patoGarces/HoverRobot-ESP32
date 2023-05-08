@@ -20,7 +20,8 @@
         "unistd.h": "c",
         "freertos.h": "c",
         "comms.h": "c",
-        "esp_log.h": "c"
+        "esp_log.h": "c",
+        "main.h": "c"
     },
     "idf.portWin": "COM8",
     "idf.adapterTargetName": "esp32"

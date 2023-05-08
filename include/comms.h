@@ -3,7 +3,6 @@
 
 #include "stdio.h"
 
-
 #define HEADER_COMMS 0xABC0
 
  typedef struct{
@@ -12,13 +11,12 @@
     uint32_t ki;
     uint32_t kd;
     uint32_t checksum;
-} pidSettings_t;
+} pid_settings_t;
 
 typedef struct{
     uint16_t header;
     uint16_t bat_voltage;
     uint16_t bat_percent;
-    // uint16_t is_charging;
     uint16_t batTemp;
     uint16_t temp_uc_control;
     uint16_t temp_uc_main;
@@ -43,14 +41,14 @@ typedef struct{
 //     ERROR_CODE_UNKNOWN
 // }error_code_enum;
 
-typedef struct{
-    uint16_t P;
-    uint16_t I;
-    uint16_t D;
-    uint8_t enable;
-    uint8_t orden_code;
-    uint8_t error_code;
-}rx_bt_app_t;
+// typedef struct{
+//     uint16_t P;
+//     uint16_t I;
+//     uint16_t D;
+//     uint8_t enable;
+//     uint8_t orden_code;
+//     uint8_t error_code;
+// }rx_bt_app_t;
 
 /**
  * @brief     handler for write and read

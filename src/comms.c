@@ -9,6 +9,7 @@
 
 QueueHandle_t queueReceive;
 QueueHandle_t queueSend;
+QueueHandle_t queueNewPidParams;
 
 
 void spp_wr_task_start_up(spp_wr_task_cb_t p_cback, int fd)
@@ -22,20 +23,15 @@ void spp_wr_task_shut_down(void)
 
 void spp_read_handle(void * param)
 {
-    queueReceive = xQueueCreate(1, sizeof(pidSettings_t));
+    queueReceive = xQueueCreate(1, sizeof(pid_settings_t));
+    queueNewPidParams = xQueueCreate(1,sizeof(pid_settings_t));
     queueSend = xQueueCreate(1, sizeof(status_robot_t));
 
-    pidSettings_t pidSettings;
+    pid_settings_t newPidSettings;
  
-    pidSettings.header = 0;
-    pidSettings.kp = 0;
-    pidSettings.ki = 0;
-    pidSettings.kd = 0;
-
     do {
-
         if( xQueueReceive(queueReceive,
-                         &pidSettings,
+                         &newPidSettings,
                          ( TickType_t ) 100 ) == pdPASS ){
             
             // esp_log_buffer_hex("ENQUEUE RECEIVE:", &pidSettings, sizeof(pidSettings));
@@ -43,10 +39,10 @@ void spp_read_handle(void * param)
             //     printf("HEader detectado! \n");
             // }
 
-            if(pidSettings.checksum == (pidSettings.header ^ pidSettings.kp ^ pidSettings.ki ^ pidSettings.kd)){
-                printf("KP = %ld, KI = %ld, KD = %ld, checksum: %ld\n", pidSettings.kp,pidSettings.ki,pidSettings.kd,pidSettings.checksum);
+            if(newPidSettings.header == HEADER_COMMS && (newPidSettings.checksum == (newPidSettings.header ^ newPidSettings.kp ^ newPidSettings.ki ^ newPidSettings.kd))){
+                printf("KP = %ld, KI = %ld, KD = %ld, checksum: %ld\n", newPidSettings.kp,newPidSettings.ki,newPidSettings.kd,newPidSettings.checksum);
+                xQueueSend(queueNewPidParams,(void*)&newPidSettings,0);
             }
-
         }
     } while (1);
 
