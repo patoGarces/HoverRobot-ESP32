@@ -8,7 +8,7 @@
 #define COMMS_CORE  0
 
 QueueHandle_t queueReceive;
-QueueHandle_t queueSend;
+extern QueueHandle_t queueSend;
 extern QueueHandle_t queueNewPidParams;
 
 
@@ -24,10 +24,9 @@ void spp_wr_task_shut_down(void)
 void spp_read_handle(void * param)
 {
     queueReceive = xQueueCreate(1, sizeof(pid_settings_t));
-    queueSend = xQueueCreate(1, sizeof(status_robot_t));
 
     pid_settings_t newPidSettings;
- 
+    
     do {
         if( xQueueReceive(queueReceive,
                          &newPidSettings,

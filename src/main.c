@@ -6,13 +6,16 @@
 #include "main.h"
 #include "comms.h"
 #include "PID.h"
-// #include "storage_flash.h"
+#include "storage_flash.h"
 
 /* Incluyo componentes */
 #include "../components/MPU6050/include/MPU6050.h"
 #include "../components/TFMINI/include/tfMini.h"
 #include "../components/CAN_COMM/include/CAN_COMMS.h"
 #include "../components/BT_CLASSIC/include/BT_CLASSIC.h"
+
+#define MIN_ANGLE_OUTPUT    -10.00
+#define MAX_ANGLE_OUTPUT    10.00
 
 extern QueueSetHandle_t newAnglesQueue;                 // Recibo nuevos angulos obtenidos del MPU
 QueueHandle_t queueNewPidParams;                 // Recibo nuevos parametros relacionados al pid
@@ -26,12 +29,6 @@ static void imuControlHandler(void *pvParameters){
     output_motors_t outputMotors;
 
     outputMotorQueue = xQueueCreate(5,sizeof(output_motors_t));
-
-    pidInit();
-    pidSetKs(0,0,0);
-    pidSetPointAngle(0);
-    pidSetLimits(-100,100);
-
 
     while(1){
 
@@ -69,8 +66,9 @@ static void updateParams(void *pvParameters){
     while (1){
         
         if(xQueueReceive(queueNewPidParams,&newPidParams,0)){
-            pidSetKs(newPidParams.kp/100,newPidParams.ki/100,newPidParams.kd/100);
-            // pidSetPointAngle( newPidParams.);                                        // TODO: incorporar el centerAngle en la recepcion de parametros del pid
+            printf("Nuevos parametros recibidos: %f\n",(float)newPidParams.kp/100);
+            pidSetConstants((float)newPidParams.kp/100,(float)newPidParams.ki/100,(float)newPidParams.kd/100, -0.15); // TODO: incorporar el centerAngle en la recepcion de parametros del pid
+            // pidSetPointAngle( newPidParams.);                                        
         }
         vTaskDelay(pdMS_TO_TICKS(100));
     }
@@ -79,20 +77,20 @@ static void updateParams(void *pvParameters){
 
 void app_main() {
     // uint16_t distance = 0;
-    uint8_t cont1=0,cont2=0,cont3=0,contNvs = 0;
+    uint8_t cont1=0,cont2=0,cont3=0;
+    pid_params_t readParams={0};
 
     gpio_set_direction(PIN_LED , GPIO_MODE_OUTPUT);
     gpio_set_level(PIN_LED, 0);
 
-    // storageInit();
-
-    // contNvs = storageReadPidParams();
-    // printf("Valor leido al iniciar: %d",contNvs);
-    // contNvs++;
-    // storageWritePidParams(contNvs);
+    storageInit();
 
     bt_init();
     mpu_init();
+    readParams = storageReadPidParams();
+    printf("center: %f kp: %f , ki: %f , kd: %f\n",readParams.centerAngle,readParams.kp,readParams.ki,readParams.kd);
+    pidInit(readParams,MIN_ANGLE_OUTPUT,MAX_ANGLE_OUTPUT);
+
     // tfMiniInit();
     // canInit(GPIO_CAN_TX,GPIO_CAN_RX,UART_PORT_CAN);
 

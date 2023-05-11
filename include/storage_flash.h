@@ -3,9 +3,15 @@
 
 #include "stdio.h"
 
+typedef struct{
+    float kp;
+    float ki;
+    float kd;
+    float centerAngle;
+}pid_params_t;
 
 void storageInit(void);
-bool storageWritePidParams(uint16_t cont);
-int16_t storageReadPidParams(void);
+void storageWritePidParams(pid_params_t params);
+pid_params_t storageReadPidParams(void);
 
 #endif
