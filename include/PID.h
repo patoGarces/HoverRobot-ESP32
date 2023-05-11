@@ -2,14 +2,15 @@
 #define __PID_H__
 
 #include <stdio.h>
+#include "storage_flash.h"
 
-void pidInit(void);
+void pidInit(pid_params_t params,float angleMin,float angleMax);
 void pidEnable(void);
 void pidDisable(void);
 float pidCalculate(float input);
-void pidSetPointAngle(float angle);
+// void pidSetPointAngle(float angle);
 void pidSetLimits(float min,float max);									//con esta funcion seteo los limites máximos y minimos de ambos motores
-void pidSetKs(float KP,float KI,float KD);
+void pidSetConstants(float KP,float KI,float KD,float targetAngle);
 
 struct PID_n1;
 

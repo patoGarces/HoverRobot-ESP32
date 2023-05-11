@@ -9,13 +9,12 @@ uint16_t contador_timer=0;
 
 pid_control_t PID_n1;
 
-void pidInit(void){																
+void pidInit(pid_params_t params,float angleMin,float angleMax){																
 
 	PID_n1.enablePID = 0;
-//	set_ajuste_pid1(0.07,0.00,0.00);											// TODO: deberia recuperar estas variables de la EEPROM
-	// pidSetKs(0,0,0);
-    // pidSetPointAngle(0);
-    // pidSetLimits();
+	pidSetConstants(params.kp,params.ki,params.kd,params.centerAngle);
+    pidSetLimits(angleMin,angleMax);
+	// pidSetPointAngle(0);
 }
 
 void pidEnable(void){
@@ -70,12 +69,22 @@ void pidSetPointAngle(float angulo){
  * 	Funcion para cargar los parametros al filtro PID
  *	Todos los parametros deben estar entre 0.00 y 1.00
 */ 
-void pidSetKs(float KP,float KI,float KD){
+void pidSetConstants(float KP,float KI,float KD,float targetAngle){
+	pid_params_t writeParams = {0};
 
-  double SampleTimeInSec = ((double)periodoPID)/1000;
-  PID_n1.kp = KP;
-  PID_n1.ki = KI * SampleTimeInSec;																 
-  PID_n1.kd = KD / SampleTimeInSec;
+	double SampleTimeInSec = ((double)periodoPID)/1000;
+	PID_n1.kp = KP;
+	PID_n1.ki = KI * SampleTimeInSec;																 
+	PID_n1.kd = KD / SampleTimeInSec;
+	PID_n1.set_angle= targetAngle;
+
+	writeParams.kp = KP;
+	writeParams.ki = KI;
+	writeParams.kd = KD;
+	writeParams.centerAngle = targetAngle;
+
+	printf("pidSetConstant : %f\n",KP);
+  	storageWritePidParams(writeParams);
 }
  
  /* 
