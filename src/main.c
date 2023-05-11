@@ -15,7 +15,7 @@
 #include "../components/BT_CLASSIC/include/BT_CLASSIC.h"
 
 extern QueueSetHandle_t newAnglesQueue;                 // Recibo nuevos angulos obtenidos del MPU
-extern QueueHandle_t queueNewPidParams;                 // Recibo nuevos parametros relacionados al pid
+QueueHandle_t queueNewPidParams;                 // Recibo nuevos parametros relacionados al pid
 QueueSetHandle_t outputMotorQueue;                      // Envio nuevos valores de salida para el control de motores
 
 status_robot_t statusToSend;                            // Estructura que contiene todos los parametros de status a enviar a la app
@@ -35,7 +35,7 @@ static void imuControlHandler(void *pvParameters){
 
     while(1){
 
-        if(xQueueReceive(newAnglesQueue,&newAngles,0)){
+        if(xQueueReceive(newAnglesQueue,&newAngles,1)){
 
             statusToSend.pitch = newAngles[AXIS_ANGLE_X];
             statusToSend.roll = newAngles[AXIS_ANGLE_Y];
@@ -64,9 +64,11 @@ static void updateParams(void *pvParameters){
 
     pid_settings_t newPidParams;
 
+    queueNewPidParams = xQueueCreate(1,sizeof(pid_settings_t));
+
     while (1){
         
-        if(xQueueReceive(queueNewPidParams,(void *)&newPidParams,1)){
+        if(xQueueReceive(queueNewPidParams,&newPidParams,0)){
             pidSetKs(newPidParams.kp/100,newPidParams.ki/100,newPidParams.kd/100);
             // pidSetPointAngle( newPidParams.);                                        // TODO: incorporar el centerAngle en la recepcion de parametros del pid
         }
