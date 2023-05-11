@@ -6,6 +6,7 @@
 #include "main.h"
 #include "comms.h"
 #include "PID.h"
+// #include "storage_flash.h"
 
 /* Incluyo componentes */
 #include "../components/MPU6050/include/MPU6050.h"
@@ -20,7 +21,7 @@ QueueSetHandle_t outputMotorQueue;                      // Envio nuevos valores 
 status_robot_t statusToSend;                            // Estructura que contiene todos los parametros de status a enviar a la app
 
 static void imuControlHandler(void *pvParameters){
-    bool toggle = false;
+    // bool toggle = false;
     float newAngles[3];
     output_motors_t outputMotors;
 
@@ -48,13 +49,13 @@ static void imuControlHandler(void *pvParameters){
             statusToSend.speedL = outputMotors.motorL;
             statusToSend.speedR = outputMotors.motorR;
 
-            if(toggle){
-                toggle=0;
-            }
-            else{
-                toggle=1;
-            }
-            gpio_set_level(PIN_LED,toggle);
+            // if(toggle){
+            //     toggle=0;
+            // }
+            // else{
+            //     toggle=1;
+            // }
+            // gpio_set_level(PIN_LED,toggle);
         }
     }
 }
@@ -76,10 +77,17 @@ static void updateParams(void *pvParameters){
 
 void app_main() {
     // uint16_t distance = 0;
-    uint8_t cont1=0,cont2=0,cont3=0;
+    uint8_t cont1=0,cont2=0,cont3=0,contNvs = 0;
 
     gpio_set_direction(PIN_LED , GPIO_MODE_OUTPUT);
     gpio_set_level(PIN_LED, 0);
+
+    // storageInit();
+
+    // contNvs = storageReadPidParams();
+    // printf("Valor leido al iniciar: %d",contNvs);
+    // contNvs++;
+    // storageWritePidParams(contNvs);
 
     bt_init();
     mpu_init();

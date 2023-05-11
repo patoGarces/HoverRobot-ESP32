@@ -21,7 +21,8 @@
         "freertos.h": "c",
         "comms.h": "c",
         "esp_log.h": "c",
-        "main.h": "c"
+        "main.h": "c",
+        "storage_flash.h": "c"
     },
     "idf.portWin": "COM8",
     "idf.adapterTargetName": "esp32"
