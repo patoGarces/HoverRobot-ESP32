@@ -4,6 +4,7 @@
 #include "freertos/queue.h"
 
 #include "comms.h"
+#include "storage_flash.h"
 
 #define COMMS_CORE  0
 
@@ -26,6 +27,7 @@ void spp_read_handle(void * param)
     queueReceive = xQueueCreate(1, sizeof(pid_settings_t));
 
     pid_settings_t newPidSettings;
+    pid_params_t pidParams;
     
     do {
         if( xQueueReceive(queueReceive,
@@ -33,13 +35,16 @@ void spp_read_handle(void * param)
                          ( TickType_t ) 100 ) == pdPASS ){
             
             // esp_log_buffer_hex("ENQUEUE RECEIVE:", &pidSettings, sizeof(pidSettings));
-            // if(pidSettings.header == 0xABC0){
-            //     printf("HEader detectado! \n");
-            // }
 
             if(newPidSettings.header == HEADER_COMMS && (newPidSettings.checksum == (newPidSettings.header ^ newPidSettings.kp ^ newPidSettings.ki ^ newPidSettings.kd))){
                 printf("KP = %ld, KI = %ld, KD = %ld, checksum: %ld\n", newPidSettings.kp,newPidSettings.ki,newPidSettings.kd,newPidSettings.checksum);
-                xQueueSend(queueNewPidParams,(void*)&newPidSettings,0);
+                
+                // pidParams.centerAngle = (float)newPidSettings.centerAngle/100;
+                pidParams.centerAngle = -0.15;
+                pidParams.kp = (float)newPidSettings.kp/100;
+                pidParams.ki = (float)newPidSettings.ki/100;
+                pidParams.kd = (float)newPidSettings.kd/100;
+                xQueueSend(queueNewPidParams,(void*)&pidParams,0);
             }
         }
     } while (1);

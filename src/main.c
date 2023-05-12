@@ -14,8 +14,8 @@
 #include "../components/CAN_COMM/include/CAN_COMMS.h"
 #include "../components/BT_CLASSIC/include/BT_CLASSIC.h"
 
-#define MIN_ANGLE_OUTPUT    -10.00
-#define MAX_ANGLE_OUTPUT    10.00
+#define MIN_ANGLE_OUTPUT    -100.00
+#define MAX_ANGLE_OUTPUT    100.00
 
 extern QueueSetHandle_t newAnglesQueue;                 // Recibo nuevos angulos obtenidos del MPU
 QueueHandle_t queueNewPidParams;                 // Recibo nuevos parametros relacionados al pid
@@ -46,6 +46,12 @@ static void imuControlHandler(void *pvParameters){
             statusToSend.speedL = outputMotors.motorL;
             statusToSend.speedR = outputMotors.motorR;
 
+            // Envio data a los motores
+            // sendMotorData(outputMotors.motorR,outputMotors.motorL,0x00,0x00);           // TODO: controlar el enable
+
+            //Envio log para graficar en arduino serial plotter
+            printf("angle_X:%f,output_PID:%d\n",newAngles[AXIS_ANGLE_X],outputMotors.motorR);
+
             // if(toggle){
             //     toggle=0;
             // }
@@ -59,16 +65,18 @@ static void imuControlHandler(void *pvParameters){
 
 static void updateParams(void *pvParameters){
 
-    pid_settings_t newPidParams;
+    pid_params_t newPidParams;
 
-    queueNewPidParams = xQueueCreate(1,sizeof(pid_settings_t));
+    queueNewPidParams = xQueueCreate(1,sizeof(pid_params_t));
 
     while (1){
         
         if(xQueueReceive(queueNewPidParams,&newPidParams,0)){
-            printf("Nuevos parametros recibidos: %f\n",(float)newPidParams.kp/100);
-            pidSetConstants((float)newPidParams.kp/100,(float)newPidParams.ki/100,(float)newPidParams.kd/100, -0.15); // TODO: incorporar el centerAngle en la recepcion de parametros del pid
-            // pidSetPointAngle( newPidParams.);                                        
+            printf("Nuevos parametros recibidos: %f\n",newPidParams.kp);
+            pidSetConstants(newPidParams.kp,newPidParams.ki,newPidParams.kd, newPidParams.centerAngle); // TODO: incorporar el centerAngle en la recepcion de parametros del pid
+            // pidSetPointAngle( newPidParams.);   
+            
+            storageWritePidParams(newPidParams);                                    
         }
         vTaskDelay(pdMS_TO_TICKS(100));
     }
@@ -101,7 +109,7 @@ void app_main() {
 
     while(1){
 
-       printf("angleX: %f , angleY: %f\n",getAngle(AXIS_ANGLE_X),getAngle(AXIS_ANGLE_Y));
+    //    printf("angleX: %f , angleY: %f\n",getAngle(AXIS_ANGLE_X),getAngle(AXIS_ANGLE_Y));
 
         // distance = tfMiniGetDist();
         // printf("angleX: %f  , distance: %d\n",angleX,distance);

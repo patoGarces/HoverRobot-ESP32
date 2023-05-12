@@ -1,7 +1,7 @@
 #include "PID.h"
 #include "stdio.h"
 
-const uint8_t periodoPID=10;  										//periodo cada el cual se ejecuta el PID en ms
+const uint8_t periodoPID=2.5;  										//periodo cada el cual se ejecuta el PID en ms
 
 float angle_min, angle_max;
 float ITerm, lastInput;
@@ -70,21 +70,12 @@ void pidSetPointAngle(float angulo){
  *	Todos los parametros deben estar entre 0.00 y 1.00
 */ 
 void pidSetConstants(float KP,float KI,float KD,float targetAngle){
-	pid_params_t writeParams = {0};
 
 	double SampleTimeInSec = ((double)periodoPID)/1000;
 	PID_n1.kp = KP;
 	PID_n1.ki = KI * SampleTimeInSec;																 
 	PID_n1.kd = KD / SampleTimeInSec;
 	PID_n1.set_angle= targetAngle;
-
-	writeParams.kp = KP;
-	writeParams.ki = KI;
-	writeParams.kd = KD;
-	writeParams.centerAngle = targetAngle;
-
-	printf("pidSetConstant : %f\n",KP);
-  	storageWritePidParams(writeParams);
 }
  
  /* 

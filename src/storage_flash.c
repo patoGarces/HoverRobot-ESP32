@@ -24,7 +24,8 @@ void eraseFlash(){
 
 void storageWritePidParams(pid_params_t params){
 
-     printf("Guardando nuevos parametros : %f\n",params.kp);
+     printf("Guardando parametros PID: KP = %f, KI = %f, KD = %f, center = %f\n", params.kp,params.ki,params.kd,params.centerAngle);
+                
 
     esp_err_t err = nvs_open(NAMESPACE1,NVS_READWRITE,&storageHandle);
     if( err != ESP_OK){
