@@ -10,6 +10,7 @@
     uint32_t kp;
     uint32_t ki;
     uint32_t kd;
+    int32_t  centerAngle;
     uint32_t checksum;
 } pid_settings_t;
 
