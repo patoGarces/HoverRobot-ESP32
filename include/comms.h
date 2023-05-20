@@ -3,10 +3,17 @@
 
 #include "stdio.h"
 
-#define HEADER_COMMS 0xABC0
+#define HEADER_COMMS            0xABC0
+#define HEADER_TX_KEY_STATUS    0xAB01          // key a enviar que indica que el paquete enviado a la app es un status
+#define HEADER_RX_KEY_CONTROL   0xAB02          // key que indica qe el paquete recibido de la app es de control
+#define HEADER_RX_KEY_SETTINGS  0xAB03          // key que indica qe el paquete recibido de la app es de configuracion
 
+/**
+ * @brief Estructura de datos de configuracion recibida de la app
+ */
  typedef struct{
     uint32_t header;
+    uint32_t header_key;
     uint32_t kp;
     uint32_t ki;
     uint32_t kd;
@@ -14,6 +21,20 @@
     uint32_t checksum;
 } pid_settings_t;
 
+/**
+ * @brief Estructura de datos de control recibida de la app
+ */
+ typedef struct{
+    uint32_t header;
+    uint32_t header_key;
+    int32_t axis_x;
+    int32_t axis_y;
+    uint32_t checksum;
+} control_app_t;
+
+/**
+ * @brief Esta estructura de datos es la que se envia a la app android
+ */
 typedef struct{
     uint16_t header;
     uint16_t bat_voltage;

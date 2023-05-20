@@ -14,6 +14,9 @@
 #include "../components/CAN_COMM/include/CAN_COMMS.h"
 #include "../components/BT_CLASSIC/include/BT_CLASSIC.h"
 
+
+#define GRAPH_ARDUINO_PLOTTER   false
+
 #define MIN_ANGLE_OUTPUT    -100.00
 #define MAX_ANGLE_OUTPUT    100.00
 
@@ -49,8 +52,10 @@ static void imuControlHandler(void *pvParameters){
             // Envio data a los motores
             // sendMotorData(outputMotors.motorR,outputMotors.motorL,0x00,0x00);           // TODO: controlar el enable
 
-            //Envio log para graficar en arduino serial plotter
-            printf("angle_X:%f,output_PID:%d\n",newAngles[AXIS_ANGLE_X],outputMotors.motorR);
+            if(GRAPH_ARDUINO_PLOTTER){
+                //Envio log para graficar en arduino serial plotter
+                printf("angle_X:%f,output_PID:%d\n",newAngles[AXIS_ANGLE_X],outputMotors.motorR);
+            }
 
             // if(toggle){
             //     toggle=0;
