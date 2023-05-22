@@ -32,10 +32,10 @@ void spp_read_handle(void * param)
     control_app_t newControlVal;
     pid_params_t pidParams;
     
-    do {
+    while (1){
         if( xQueueReceive(queueReceiveSettings,
                          &newPidSettings,
-                         ( TickType_t ) 100 ) == pdPASS ){
+                         ( TickType_t ) 1 ) == pdPASS ){
             
             // esp_log_buffer_hex("ENQUEUE RECEIVE:", &pidSettings, sizeof(pidSettings));
 
@@ -52,12 +52,10 @@ void spp_read_handle(void * param)
         }
         if( xQueueReceive(queueReceiveControl,
                          &newControlVal,
-                         ( TickType_t ) 100 ) == pdPASS ){
+                         ( TickType_t ) 1 ) == pdPASS ){
             printf("CONTROL RECIBIDO: X: %ld, Y: %ld\n",newControlVal.axis_x,newControlVal.axis_y);
-        }
-
-        
-    } while (1);
+        }   
+    }
 
     spp_wr_task_shut_down();
 }
