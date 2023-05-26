@@ -7,6 +7,7 @@
 #include "comms.h"
 #include "PID.h"
 #include "storage_flash.h"
+#include "stepper.h"
 
 /* Incluyo componentes */
 #include "../components/MPU6050/include/MPU6050.h"
@@ -104,6 +105,8 @@ void app_main() {
     printf("center: %f kp: %f , ki: %f , kd: %f\n",readParams.centerAngle,readParams.kp,readParams.ki,readParams.kd);
     pidInit(readParams,MIN_ANGLE_OUTPUT,MAX_ANGLE_OUTPUT);
 
+    motorsInit();
+
     // tfMiniInit();
     // canInit(GPIO_CAN_TX,GPIO_CAN_RX,UART_PORT_CAN);
 
@@ -111,6 +114,9 @@ void app_main() {
     xTaskCreate(updateParams,"Update Params Task",2048,NULL,6,NULL);
     
     pidEnable();
+    enableMotors();
+
+    setVelMotors(500,-500);
 
     while(1){
 

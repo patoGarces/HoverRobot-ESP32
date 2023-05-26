@@ -22,8 +22,9 @@
         "comms.h": "c",
         "esp_log.h": "c",
         "main.h": "c",
-        "storage_flash.h": "c"
+        "storage_flash.h": "c",
+        "stepper.h": "c"
     },
-    "idf.portWin": "COM8",
+    "idf.portWin": "COM9",
     "idf.adapterTargetName": "esp32"
 }
