@@ -3,16 +3,15 @@
 
 #include <stdio.h>
 #include "storage_flash.h"
+#include "stdbool.h"
 
-void pidInit(pid_params_t params,float angleMin,float angleMax);
-void pidEnable(void);
-void pidDisable(void);
+void pidInit(pid_params_t params);
+void setEnablePid(void);
+void setDisablePid(void);
+bool getEnablePid(void);
 float pidCalculate(float input);
-// void pidSetPointAngle(float angle);
-void pidSetLimits(float min,float max);									//con esta funcion seteo los limites máximos y minimos de ambos motores
+void pidSetPointAngle(float angle);
 void pidSetConstants(float KP,float KI,float KD,float targetAngle);
-
-struct PID_n1;
 
 typedef struct{
 	

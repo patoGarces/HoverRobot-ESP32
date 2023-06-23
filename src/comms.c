@@ -9,7 +9,7 @@
 #define COMMS_CORE  0
 
 QueueHandle_t queueReceiveSettings;
-QueueHandle_t queueReceiveControl;
+// QueueHandle_t queueReceiveControl;
 extern QueueHandle_t queueSend;
 extern QueueHandle_t queueNewPidParams;
 
@@ -26,10 +26,10 @@ void spp_wr_task_shut_down(void)
 void spp_read_handle(void * param)
 {
     queueReceiveSettings = xQueueCreate(1, sizeof(pid_settings_t));
-    queueReceiveControl = xQueueCreate(1, sizeof(control_app_t));
+    // queueReceiveControl = xQueueCreate(1, sizeof(control_app_t));
 
     pid_settings_t newPidSettings;
-    control_app_t newControlVal;
+    // control_app_t newControlVal;
     pid_params_t pidParams;
     
     while (1){
@@ -50,11 +50,11 @@ void spp_read_handle(void * param)
                 xQueueSend(queueNewPidParams,(void*)&pidParams,0);
             }
         }
-        if( xQueueReceive(queueReceiveControl,
-                         &newControlVal,
-                         ( TickType_t ) 1 ) == pdPASS ){
-            printf("CONTROL RECIBIDO: X: %ld, Y: %ld\n",newControlVal.axis_x,newControlVal.axis_y);
-        }   
+        // if( xQueueReceive(queueReceiveControl,
+        //                  &newControlVal,
+        //                  ( TickType_t ) 1 ) == pdPASS ){
+        //     printf("CONTROL RECIBIDO: X: %ld, Y: %ld\n",newControlVal.axis_x,newControlVal.axis_y);
+        // }   
     }
 
     spp_wr_task_shut_down();

@@ -1,30 +1,30 @@
 #include "PID.h"
 #include "stdio.h"
+#include "main.h"
 
-const uint8_t periodoPID=2.5;  										//periodo cada el cual se ejecuta el PID en ms
-
-float angle_min, angle_max;
 float ITerm, lastInput;
 uint16_t contador_timer=0;
 
+double sampleTimeInSec = ((double)PERIOD_IMU_MS)/1000;
+
 pid_control_t PID_n1;
 
-void pidInit(pid_params_t params,float angleMin,float angleMax){																
+void pidInit(pid_params_t params){															
 
 	PID_n1.enablePID = 0;
 	pidSetConstants(params.kp,params.ki,params.kd,params.centerAngle);
-    pidSetLimits(angleMin,angleMax);
-	// pidSetPointAngle(0);
 }
 
-void pidEnable(void){
-	
-	PID_n1.enablePID = 1;
+void setEnablePid(void){ 
+	PID_n1.enablePID = true;
 }
 
-void pidDisable(void){
-	
-	PID_n1.enablePID = 0;
+void setDisablePid(void){
+	PID_n1.enablePID = false;
+}
+
+bool getEnablePid(void){
+	return PID_n1.enablePID;
 }
 
 /*
@@ -37,27 +37,26 @@ float pidCalculate(float input){
 	}
 	PID_n1.input=input;
 	double error = PID_n1.set_angle - PID_n1.input;										//calculo P: resto error entre el valor seteado y el de entrada 		
-	ITerm+= (PID_n1.ki * error);														//calculo I: acumulo error ya multiplicado por ki
+	ITerm+= (sampleTimeInSec * error);													//calculo I: acumulo error ya multiplicado por ki
 
-	if(ITerm> angle_max){																//recorto el termino integral maximo
-		ITerm= angle_max;
+	if(ITerm > 15.00){																	//recorto el termino integral maximo
+		ITerm = 15.00;
 	}
-	else if(ITerm< angle_min){															//recorto el termino intgral minimo
-		ITerm= angle_min;
+	else if(ITerm < -15.00){																//recorto el termino intgral minimo
+		ITerm = -15.00;
 	}
-	double dInput = (PID_n1.input - lastInput);											//Calculo D: resto la entrada anterior a la actual
+	double dInput = (PID_n1.input - lastInput) / sampleTimeInSec;						//Calculo D: resto la entrada anterior a la actual
 
 	/*Compute PID Output*/
-	PID_n1.output = (PID_n1.kp * error) + ITerm - (PID_n1.kd * dInput);					//opero con los 3 parametros para obtener salida, el D se resta para evitar la kick derivate
-	if(PID_n1.output > angle_max){														//recorto la salida máxima
-		PID_n1.output = angle_max;
+	PID_n1.output = (PID_n1.kp * error) + (PID_n1.ki * ITerm) + ((PID_n1.kd/100) * dInput);	//opero con los 3 parametros para obtener salida, el D se resta para evitar la kick derivate
+	if(PID_n1.output > 1.00){															//recorto la salida máxima
+		PID_n1.output = 1.00;
 	}
-	else if(PID_n1.output < angle_min){													//recorto la salida minima
-		PID_n1.output = angle_min;
+	else if(PID_n1.output < -1.00){													//recorto la salida minima
+		PID_n1.output = -1.00;
 	}
 
 	lastInput = PID_n1.input;
-
 	return PID_n1.output;
 }
  
@@ -71,38 +70,8 @@ void pidSetPointAngle(float angulo){
 */ 
 void pidSetConstants(float KP,float KI,float KD,float targetAngle){
 
-	double SampleTimeInSec = ((double)periodoPID)/1000;
 	PID_n1.kp = KP;
-	PID_n1.ki = KI * SampleTimeInSec;																 
-	PID_n1.kd = KD / SampleTimeInSec;
+	PID_n1.ki = KI;																 
+	PID_n1.kd = KD;
 	PID_n1.set_angle= targetAngle;
 }
- 
- /* 
- * Funcion para limitar la salida del Filtro PID
- * si se encuentra en runtime primero recorto los parametros PID
- * para adecuarlos a los nuevos maximos y minimos
- */
-void pidSetLimits(float min, float max){	                // TODO: modificar para setear el minimo y el maximo de la salida, no un angulo???
-
-    if(min > max){
-        return;
-    }
-    angle_min = min;
-    angle_max = max;
-
-    if(PID_n1.output > angle_max){
-        PID_n1.output = angle_max;
-    }
-    else if(PID_n1.output < angle_min){
-        PID_n1.output = angle_min;
-    }
-
-    if(ITerm> angle_max){
-        ITerm= angle_max;
-    }
-    else if(ITerm< angle_min){
-        ITerm= angle_min;
-    }
-}
-

@@ -23,7 +23,13 @@
         "esp_log.h": "c",
         "main.h": "c",
         "storage_flash.h": "c",
-        "stepper.h": "c"
+        "stepper.h": "c",
+        "array": "c",
+        "string": "c",
+        "string_view": "c",
+        "pid.h": "c",
+        "gpio_periph.h": "c",
+        "stdint.h": "c"
     },
     "idf.portWin": "COM9",
     "idf.adapterTargetName": "esp32"

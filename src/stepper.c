@@ -6,9 +6,8 @@
 #include "esp_task_wdt.h"
 #include "driver/ledc.h"
 
-#define US_MIN  100
-#define US_MAX  500
-#define US_DIFF (US_MAX-US_MIN)
+#define FREQ_MIN  200
+#define FREQ_MAX  1500
 
 #define CPU_STEPPER     1
 
@@ -19,10 +18,7 @@
 #define CHANNEL_MOT_L  LEDC_CHANNEL_0
 #define CHANNEL_MOT_R  LEDC_CHANNEL_1
 
-int16_t pwmr=0,pwml=0;                  // almacena la velocidad en terminos de us
 uint8_t enableVelMot=0;
-
-static uint16_t vel2us(int16_t vel);
 
 void motorsInit(void){
     /* seteo pines de salida de steps */
@@ -63,7 +59,7 @@ void motorsInit(void){
         .channel = CHANNEL_MOT_L,
         .intr_type =  LEDC_INTR_DISABLE,
         .timer_sel = TIMER_MOT_L,
-        .duty = 8,          // 50% de duty
+        .duty = 8,                              // 50% de duty
         .hpoint = 0,
     };
     ledc_channel_config(&channelConfig);        // Channel config motor L
@@ -85,31 +81,22 @@ void enableMotors(void){
     gpio_set_level(GPIO_MOT_ENABLE,0);
     ledc_timer_resume(SPEED_MODE_TIMER,TIMER_MOT_L);
     ledc_timer_resume(SPEED_MODE_TIMER,TIMER_MOT_R);
-    printf("Enable motors\n");
 }
 void disableMotors(void){
     gpio_set_level(GPIO_MOT_ENABLE,1);
     ledc_timer_pause(SPEED_MODE_TIMER,TIMER_MOT_L);
     ledc_timer_pause(SPEED_MODE_TIMER,TIMER_MOT_R);
-    printf("disable motors\n");
-}
-
-static uint16_t vel2us(int16_t vel){
-    uint16_t velReal = abs(vel)/10;                         //obtengo el valor absoluto dividido por 10, de esta manera lo convierto a porcentaje
-
-    if(vel != 0 ){
-        enableVelMot=1;      
-    }
-    else{                                                   // si la velocidad es 0 deshabilito los pulsos step
-//        enableVelMot=0;
-    }
-    return US_MIN+(((100-velReal) * US_DIFF) / 100);
 }
 
 void setVelMotors(int16_t speedL,int16_t speedR){
+    uint32_t timerFreqL=0,timerFreqR=0;
 
-    if(speedL <1000 && speedL> -1000){
-        pwml = vel2us(speedL);
+    if(speedL <= 1000 && speedL >= -1000){
+
+        timerFreqL = FREQ_MIN + (abs(speedL)*((FREQ_MAX-FREQ_MIN)/1000));
+        ledc_set_freq(SPEED_MODE_TIMER,TIMER_MOT_L,timerFreqL);
+        // printf("speedL: %d , freqL :%ld\n",speedL,timerFreqL);
+        
         if(speedL < 0){
             gpio_set_level(GPIO_MOT_L_DIR,1);
         }
@@ -121,8 +108,9 @@ void setVelMotors(int16_t speedL,int16_t speedR){
  //       enableVelMot=0;
     }
 
-    if(speedR <1000 && speedR> -1000){
-        pwmr = vel2us(speedR);
+    if(speedR <= 1000 && speedR >= -1000){
+        timerFreqR = FREQ_MIN + (abs(speedL)*((FREQ_MAX-FREQ_MIN)/1000));
+        ledc_set_freq(SPEED_MODE_TIMER,TIMER_MOT_R,timerFreqR);
         if(speedR < 0){
             gpio_set_level(GPIO_MOT_R_DIR,0);
         }
