@@ -16,11 +16,9 @@
 #include "../components/CAN_COMM/include/CAN_COMMS.h"
 #include "../components/BT_CLASSIC/include/BT_CLASSIC.h"
 
-#define GRAPH_ARDUINO_PLOTTER   true
+#define GRAPH_ARDUINO_PLOTTER   false
 #define MAX_VELOCITY            1000
 #define VEL_MAX_CONTROL         5    
-
-float safetyLimits = 0.00;
 
 extern QueueSetHandle_t newAnglesQueue;                 // Recibo nuevos angulos obtenidos del MPU
 QueueHandle_t queueNewPidParams;                        // Recibo nuevos parametros relacionados al pid
@@ -64,22 +62,24 @@ static void imuControlHandler(void *pvParameters){
             if(!getEnablePid()){ 
                 if((( newAngles[AXIS_ANGLE_Y] > (CENTER_ANGLE_MOUNTED-1)) && ( newAngles[AXIS_ANGLE_Y] < (CENTER_ANGLE_MOUNTED+1) )) ){ 
                     enableMotors();
-                    setEnablePid();                                                          
+                    setEnablePid();   
+                    statusToSend.status_code = STATUS_ROBOT_STABILIZED;                                                       
                 }
                 else{
                     disableMotors();
                 }
             }
             else{ 
-                if((( newAngles[AXIS_ANGLE_Y] < (CENTER_ANGLE_MOUNTED-safetyLimits)) || ( newAngles[AXIS_ANGLE_Y] > (CENTER_ANGLE_MOUNTED+safetyLimits) )) ){ 
+                if((( newAngles[AXIS_ANGLE_Y] < (CENTER_ANGLE_MOUNTED-statusToSend.safetyLimits)) || ( newAngles[AXIS_ANGLE_Y] > (CENTER_ANGLE_MOUNTED+statusToSend.safetyLimits) )) ){ 
                     disableMotors();
                     setDisablePid();
+                    statusToSend.status_code = STATUS_ROBOT_DISABLE; 
                 }
             }
 
             if(GRAPH_ARDUINO_PLOTTER){
                 //Envio log para graficar en arduino serial plotter
-                // printf("angle_x:%f,set_point: %f,output_pid: %f, output_motor:%d\n",newAngles[AXIS_ANGLE_Y],CENTER_ANGLE_MOUNTED,outputPid,outputMotors.motorL);
+                printf("angle_x:%f,set_point: %f,output_pid: %f, output_motor:%d\n",newAngles[AXIS_ANGLE_Y],CENTER_ANGLE_MOUNTED,outputPid,outputMotors.motorL);
             }
             gpio_set_level(13,0);
         }
@@ -104,7 +104,6 @@ static void updateParams(void *pvParameters){
             statusToSend.I = newPidParams.ki*100;  
             statusToSend.D = newPidParams.kd*100; 
             statusToSend.centerAngle = newPidParams.center_angle;   
-            safetyLimits = newPidParams.safety_limits;
             statusToSend.safetyLimits = newPidParams.safety_limits;   // TODO: incluir para enviarlo                 
         }
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -164,6 +163,8 @@ void app_main() {
     statusToSend.D = readParams.kd*100;
     statusToSend.centerAngle = readParams.center_angle;
     statusToSend.safetyLimits = readParams.safety_limits;
+
+    statusToSend.status_code = STATUS_ROBOT_DISABLE;
     motorsInit();
 
     // tfMiniInit();
@@ -199,7 +200,7 @@ void app_main() {
             statusToSend.batTemp = 100-cont1;
             statusToSend.temp_uc_control = cont1;
             statusToSend.temp_uc_main = 123-cont1; 
-            statusToSend.status_code = 0;
+            // statusToSend.status_code = 0;
             sendStatus(statusToSend);
         }
         gpio_set_level(PIN_LED,1);

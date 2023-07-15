@@ -65,14 +65,6 @@ typedef struct{
 //     ERROR_CODE_UNKNOWN
 // }error_code_enum;
 
-// typedef struct{
-//     uint16_t P;
-//     uint16_t I;
-//     uint16_t D;
-//     uint8_t enable;
-//     uint8_t orden_code;
-//     uint8_t error_code;
-// }rx_bt_app_t;
 
 /**
  * @brief     handler for write and read

@@ -21,6 +21,12 @@ typedef struct{
     int16_t motorL;
 }output_motors_t;
 
-
+enum{
+    STATUS_ROBOT_INIT,
+    STATUS_ROBOT_DISABLE,
+    STATUS_ROBOT_ENABLE,
+    STATUS_ROBOT_STABILIZED,
+    STATUS_ROBOT_ERROR
+};
 
 #endif
