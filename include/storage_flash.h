@@ -7,7 +7,8 @@ typedef struct{
     float kp;
     float ki;
     float kd;
-    float centerAngle;
+    float center_angle;
+    float safety_limits;
 }pid_params_t;
 
 void storageInit(void);

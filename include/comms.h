@@ -17,7 +17,8 @@
     uint32_t kp;
     uint32_t ki;
     uint32_t kd;
-    int32_t  centerAngle;
+    int32_t  center_angle;
+    uint32_t safety_limits;
     uint32_t checksum;
 } pid_settings_t;
 
@@ -42,17 +43,18 @@ typedef struct{
     uint16_t batTemp;
     uint16_t temp_uc_control;
     uint16_t temp_uc_main;
-    int16_t speedR;
-    int16_t speedL;
-    float   pitch;
-    float   roll;
-    float   yaw;
-    float   centerAngle;
+    int16_t  speedR;
+    int16_t  speedL;
+    float    pitch;
+    float    roll;
+    float    yaw;
+    float    centerAngle;
+    uint16_t    safetyLimits;
     uint16_t P;
     uint16_t I;
     uint16_t D;
     uint16_t orden_code;
-    uint16_t error_code;
+    uint16_t status_code;
     uint16_t checksum;
 }status_robot_t;
 

@@ -11,7 +11,7 @@ void setDisablePid(void);
 bool getEnablePid(void);
 float pidCalculate(float input);
 void pidSetPointAngle(float angle);
-void pidSetConstants(float KP,float KI,float KD,float targetAngle);
+void pidSetConstants(float KP,float KI,float KD);
 
 typedef struct{
 	

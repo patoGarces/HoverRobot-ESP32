@@ -39,11 +39,11 @@ void spp_read_handle(void * param)
             
             // esp_log_buffer_hex("ENQUEUE RECEIVE:", &pidSettings, sizeof(pidSettings));
 
-            if(newPidSettings.header == HEADER_COMMS && (newPidSettings.checksum == (newPidSettings.header ^ newPidSettings.header_key ^ newPidSettings.kp ^ newPidSettings.ki ^ newPidSettings.kd^ newPidSettings.centerAngle))){
-                printf("KP = %ld, KI = %ld, KD = %ld, centerAngle: %ld, checksum: %ld\n", newPidSettings.kp,newPidSettings.ki,newPidSettings.kd,newPidSettings.centerAngle,newPidSettings.checksum);
+            if(newPidSettings.header == HEADER_COMMS && (newPidSettings.checksum == (newPidSettings.header ^ newPidSettings.header_key ^ newPidSettings.kp ^ newPidSettings.ki ^ newPidSettings.kd ^ newPidSettings.center_angle ^ newPidSettings.safety_limits))){
+                printf("KP = %ld, KI = %ld, KD = %ld, centerAngle: %ld, safetyLimits: %ld, checksum: %ld\n", newPidSettings.kp,newPidSettings.ki,newPidSettings.kd,newPidSettings.center_angle,newPidSettings.safety_limits,newPidSettings.checksum);
                 
-                // pidParams.centerAngle = (float)newPidSettings.centerAngle/100;
-                pidParams.centerAngle = (float)newPidSettings.centerAngle;
+                pidParams.safety_limits = (float)newPidSettings.safety_limits;
+                pidParams.center_angle = (float)newPidSettings.center_angle;
                 pidParams.kp = (float)newPidSettings.kp/100;
                 pidParams.ki = (float)newPidSettings.ki/100;
                 pidParams.kd = (float)newPidSettings.kd/100;

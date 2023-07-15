@@ -17,10 +17,10 @@
 #include "../components/BT_CLASSIC/include/BT_CLASSIC.h"
 
 #define GRAPH_ARDUINO_PLOTTER   true
-
 #define MAX_VELOCITY            1000
-#define VEL_MAX_CONTROL         5
-#define CENTER_ANGLE_MOUNTED    84.00      
+#define VEL_MAX_CONTROL         5    
+
+float safetyLimits = 0.00;
 
 extern QueueSetHandle_t newAnglesQueue;                 // Recibo nuevos angulos obtenidos del MPU
 QueueHandle_t queueNewPidParams;                        // Recibo nuevos parametros relacionados al pid
@@ -44,8 +44,8 @@ static void imuControlHandler(void *pvParameters){
         if(xQueueReceive(newAnglesQueue,&newAngles,10)){
 
             gpio_set_level(13,1);
-            statusToSend.pitch = newAngles[AXIS_ANGLE_X];
-            statusToSend.roll = newAngles[AXIS_ANGLE_Y];
+            statusToSend.pitch = newAngles[AXIS_ANGLE_Y];
+            statusToSend.roll = newAngles[AXIS_ANGLE_X];
             statusToSend.yaw = newAngles[AXIS_ANGLE_Z];
 
             outputPid = pidCalculate(newAngles[AXIS_ANGLE_Y]) *-1; 
@@ -71,7 +71,7 @@ static void imuControlHandler(void *pvParameters){
                 }
             }
             else{ 
-                if((( newAngles[AXIS_ANGLE_Y] < (CENTER_ANGLE_MOUNTED-40)) || ( newAngles[AXIS_ANGLE_Y] > (CENTER_ANGLE_MOUNTED+40) )) ){ 
+                if((( newAngles[AXIS_ANGLE_Y] < (CENTER_ANGLE_MOUNTED-safetyLimits)) || ( newAngles[AXIS_ANGLE_Y] > (CENTER_ANGLE_MOUNTED+safetyLimits) )) ){ 
                     disableMotors();
                     setDisablePid();
                 }
@@ -95,11 +95,17 @@ static void updateParams(void *pvParameters){
     while (1){
         
         if(xQueueReceive(queueNewPidParams,&newPidParams,0)){
-            // printf("Nuevos parametros recibidos: %f\n",newPidParams.kp);
-            newPidParams.centerAngle += CENTER_ANGLE_MOUNTED;
-            pidSetConstants(newPidParams.kp,newPidParams.ki,newPidParams.kd, newPidParams.centerAngle);
-            
-            storageWritePidParams(newPidParams);                                    
+            newPidParams.center_angle += CENTER_ANGLE_MOUNTED;
+            pidSetConstants(newPidParams.kp,newPidParams.ki,newPidParams.kd);
+            pidSetPointAngle(newPidParams.center_angle);
+            storageWritePidParams(newPidParams);            
+
+            statusToSend.P = newPidParams.kp*100;  
+            statusToSend.I = newPidParams.ki*100;  
+            statusToSend.D = newPidParams.kd*100; 
+            statusToSend.centerAngle = newPidParams.center_angle;   
+            safetyLimits = newPidParams.safety_limits;
+            statusToSend.safetyLimits = newPidParams.safety_limits;   // TODO: incluir para enviarlo                 
         }
         vTaskDelay(pdMS_TO_TICKS(100));
     }
@@ -135,7 +141,7 @@ static void attitudeControl(void *pvParameters){
 
 void app_main() {
     // uint16_t distance = 0;
-    uint8_t cont1=0,cont2=0,cont3=0;
+    uint8_t cont1=0;
     pid_params_t readParams={0};
 
     gpio_set_direction(PIN_LED , GPIO_MODE_OUTPUT);
@@ -145,15 +151,19 @@ void app_main() {
     gpio_set_direction(PIN_OSCILO , GPIO_MODE_OUTPUT);
     gpio_set_level(PIN_OSCILO, 0);
 
-
     storageInit();
 
     bt_init();
     mpu_init();
     readParams = storageReadPidParams();
-    printf("center: %f kp: %f , ki: %f , kd: %f\n",readParams.centerAngle,readParams.kp,readParams.ki,readParams.kd);
+    printf("center: %f kp: %f , ki: %f , kd: %f,safetyLimits: %f\n",readParams.center_angle,readParams.kp,readParams.ki,readParams.kd,readParams.safety_limits);
     pidInit(readParams);
 
+    statusToSend.P = readParams.kp*100;
+    statusToSend.I = readParams.ki*100;
+    statusToSend.D = readParams.kd*100;
+    statusToSend.centerAngle = readParams.center_angle;
+    statusToSend.safetyLimits = readParams.safety_limits;
     motorsInit();
 
     // tfMiniInit();
@@ -180,56 +190,21 @@ void app_main() {
         
         if(btIsConnected()){
             cont1++;
-            if(cont1>100){
+            if(cont1>50){
                 cont1 =0;
             }
-
-            cont2++;
-            if(cont2>4){
-                cont2 =0;
-            }
-
-            cont3++;
-            if(cont3>200){
-                cont3 =0;
-            }
-
-            // statusToSend={
-            //         .header = HEADER_COMMS,
-            //         .bat_voltage = 10,//cont1*10,
-            //         .bat_percent = cont3,
-            //         .batTemp = 100-cont1,
-            //         .temp_uc_control = cont1,
-            //         .temp_uc_main = 123-cont1,
-            //         .speedR = 100,
-            //         .speedL = -100,
-            //         .pitch = getAngle(AXIS_ANGLE_X),
-            //         .roll = getAngle(AXIS_ANGLE_Y),
-            //         .yaw = getAngle(AXIS_ANGLE_Z),
-            //         .centerAngle = 0,
-            //         .P = 10,
-            //         .I = 20,
-            //         .D = 30,   
-            //         .orden_code = 15,
-            //         .error_code = cont2,//ERROR_CODE_INIT,
-            //         .checksum = 0
-            //     };
-
             statusToSend.header = HEADER_COMMS;
             statusToSend.bat_voltage = 10;
-            statusToSend.bat_percent = cont3;
+            statusToSend.bat_percent = cont1;
             statusToSend.batTemp = 100-cont1;
             statusToSend.temp_uc_control = cont1;
-            statusToSend.temp_uc_main = 123-cont1;
-            statusToSend.P = 10;
-            statusToSend.I = 20;
-            statusToSend.D = 30;   
+            statusToSend.temp_uc_main = 123-cont1; 
+            statusToSend.status_code = 0;
             sendStatus(statusToSend);
         }
         gpio_set_level(PIN_LED,1);
         vTaskDelay(pdMS_TO_TICKS(50));
         gpio_set_level(PIN_LED,0);
         vTaskDelay(pdMS_TO_TICKS(50));
-        
     }
 }

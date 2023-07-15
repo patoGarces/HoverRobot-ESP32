@@ -14,6 +14,7 @@
 #define IMU_HANDLER_PRIORITY    6
 #define IMU_HANDLER_CORE        1
 
+#define CENTER_ANGLE_MOUNTED    0.00  
 
 typedef struct{
     int16_t motorR;

@@ -6,7 +6,7 @@
 #include "esp_task_wdt.h"
 #include "driver/ledc.h"
 
-#define FREQ_MIN  200
+#define FREQ_MIN  100
 #define FREQ_MAX  1500
 
 #define CPU_STEPPER     1
@@ -37,8 +37,6 @@ void motorsInit(void){
     /* seteo pines de salida de enable*/
     pinesMotor.pin_bit_mask = (1 << GPIO_MOT_ENABLE);
     gpio_config(&pinesMotor);
-
-    gpio_set_level(GPIO_MOT_ENABLE,1);
 
     ledc_timer_config_t timerConfig={
         .speed_mode = SPEED_MODE_TIMER,
@@ -74,6 +72,8 @@ void motorsInit(void){
 
     ledc_timer_pause(SPEED_MODE_TIMER,TIMER_MOT_L);
     ledc_timer_pause(SPEED_MODE_TIMER,TIMER_MOT_R);
+
+    disableMotors();
 }
 
 
