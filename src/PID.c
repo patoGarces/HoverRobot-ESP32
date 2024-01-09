@@ -43,7 +43,7 @@ float pidCalculate(float input){
 	if(ITerm > 15.00){																	//recorto el termino integral maximo
 		ITerm = 15.00;
 	}
-	else if(ITerm < -15.00){																//recorto el termino intgral minimo
+	else if(ITerm < -15.00){															//recorto el termino intgral minimo
 		ITerm = -15.00;
 	}
 	double dInput = (PID_n1.input - lastInput) / sampleTimeInSec;						//Calculo D: resto la entrada anterior a la actual
@@ -53,7 +53,7 @@ float pidCalculate(float input){
 	if(PID_n1.output > 1.00){															//recorto la salida máxima
 		PID_n1.output = 1.00;
 	}
-	else if(PID_n1.output < -1.00){													//recorto la salida minima
+	else if(PID_n1.output < -1.00){														//recorto la salida minima
 		PID_n1.output = -1.00;
 	}
 

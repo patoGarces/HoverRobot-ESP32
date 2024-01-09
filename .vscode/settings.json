@@ -29,8 +29,9 @@
         "string_view": "c",
         "pid.h": "c",
         "gpio_periph.h": "c",
-        "stdint.h": "c"
+        "stdint.h": "c",
+        "stream_buffer.h": "c"
     },
-    "idf.portWin": "COM9",
+    "idf.portWin": "COM6",
     "idf.adapterTargetName": "esp32"
 }

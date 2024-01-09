@@ -28,8 +28,8 @@
  typedef struct{
     uint32_t header;
     uint32_t header_key;
-    int32_t axis_x;
-    int32_t axis_y;
+    int32_t  axis_x;
+    int32_t  axis_y;
     uint32_t checksum;
 } control_app_t;
 
@@ -58,22 +58,6 @@ typedef struct{
     uint16_t checksum;
 }status_robot_t;
 
-// enum{
-//     ERROR_CODE_INIT,
-//     ERROR_CODE_NORMAL,
-//     ERROR_CODE_ERROR,
-//     ERROR_CODE_UNKNOWN
-// }error_code_enum;
-
-
-/**
- * @brief     handler for write and read
- */
-typedef void (* spp_wr_task_cb_t) (void *fd);
-
-
-void spp_read_handle(void * param);
-void spp_wr_task_shut_down(void);
-void spp_wr_task_start_up(spp_wr_task_cb_t p_cback, int fd);
+void spp_wr_task_start_up(void);
 void sendStatus(status_robot_t status);
 #endif

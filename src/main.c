@@ -19,6 +19,7 @@
 #define GRAPH_ARDUINO_PLOTTER   false
 #define MAX_VELOCITY            1000
 #define VEL_MAX_CONTROL         5    
+#define DEVICE_BT_NAME          "Balancing robot"
 
 extern QueueSetHandle_t newAnglesQueue;                 // Recibo nuevos angulos obtenidos del MPU
 QueueHandle_t queueNewPidParams;                        // Recibo nuevos parametros relacionados al pid
@@ -133,7 +134,7 @@ static void attitudeControl(void *pvParameters){
                 enableMotors();
             }
 
-            // printf("CONTROL RECIBIDO: X: %ld, Y: %ld, motorL: %d ,motorR: %d \n",newControlVal.axis_x,newControlVal.axis_y,attitudeControlMotor.motorL,attitudeControlMotor.motorR);
+            printf("CONTROL RECIBIDO: X: %ld, Y: %ld, motorL: %d ,motorR: %d \n",newControlVal.axis_x,newControlVal.axis_y,attitudeControlMotor.motorL,attitudeControlMotor.motorR);
         } 
     }
 }
@@ -152,7 +153,7 @@ void app_main() {
 
     storageInit();
 
-    bt_init();
+    btInit( DEVICE_BT_NAME );
     mpu_init();
     readParams = storageReadPidParams();
     printf("center: %f kp: %f , ki: %f , kd: %f,safetyLimits: %f\n",readParams.center_angle,readParams.kp,readParams.ki,readParams.kd,readParams.safety_limits);
@@ -173,7 +174,6 @@ void app_main() {
     xTaskCreatePinnedToCore(imuControlHandler,"Imu Control Task",4096,NULL,IMU_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);
     xTaskCreate(updateParams,"Update Params Task",2048,NULL,3,NULL);
     xTaskCreate(attitudeControl,"attitude control Task",2048,NULL,4,NULL);
-
 
     setVelMotors(0,0);
 
@@ -196,7 +196,7 @@ void app_main() {
             }
             statusToSend.header = HEADER_COMMS;
             statusToSend.bat_voltage = 10;
-            statusToSend.bat_percent = cont1;
+            statusToSend.bat_percent = 55;
             statusToSend.batTemp = 100-cont1;
             statusToSend.temp_uc_control = cont1;
             statusToSend.temp_uc_main = 123-cont1; 
