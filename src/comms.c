@@ -43,7 +43,7 @@ void communicationHandler(void * param){
         BaseType_t bytes_received = xStreamBufferReceive(xStreamBufferReceiver, received_data, sizeof(received_data), 0);
 
         if (bytes_received > 1){
-            esp_log_buffer_hex("xStreamBufferReceive", &received_data, bytes_received);
+            // esp_log_buffer_hex("xStreamBufferReceive", &received_data, bytes_received);
 
             uint32_t header = getUint32(0,received_data);
             uint32_t headerPackage = getUint32(4,received_data);

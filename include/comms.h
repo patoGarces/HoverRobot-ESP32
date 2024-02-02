@@ -49,7 +49,7 @@ typedef struct{
     float    roll;
     float    yaw;
     float    centerAngle;
-    uint16_t    safetyLimits;
+    uint16_t safetyLimits;
     uint16_t P;
     uint16_t I;
     uint16_t D;

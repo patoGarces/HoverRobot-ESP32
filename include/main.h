@@ -2,7 +2,7 @@
 #define __MAIN_H__
 #include "stdint.h"
 
-#define PERIOD_IMU_MS   3      
+#define PERIOD_IMU_MS   10      
 
 #define PIN_LED         2  //27 en mainBoard
 #define PIN_OSCILO      13

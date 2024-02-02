@@ -10,11 +10,13 @@
 #include "storage_flash.h"
 #include "stepper.h"
 
+
 /* Incluyo componentes */
 #include "../components/MPU6050/include/MPU6050.h"
 #include "../components/TFMINI/include/tfMini.h"
 #include "../components/CAN_COMM/include/CAN_COMMS.h"
 #include "../components/BT_CLASSIC/include/BT_CLASSIC.h"
+#include "../components/SBUS_RECEIVER/include/SBUS_RECEIVER.h"
 
 #define GRAPH_ARDUINO_PLOTTER   false
 #define MAX_VELOCITY            1000
@@ -36,20 +38,24 @@ static void imuControlHandler(void *pvParameters){
     float outputPid;
     output_motors_t outputMotors;
 
+    uint32_t cont = 0;
+
     outputMotorQueue = xQueueCreate(5,sizeof(output_motors_t));
 
     while(1){
 
         if(xQueueReceive(newAnglesQueue,&newAngles,10)){
 
-            gpio_set_level(13,1);
+            // if( getEnablePid() ){
+            //     gpio_set_level(PIN_OSCILO, 1);
+            // }
             statusToSend.pitch = newAngles[AXIS_ANGLE_Y];
             statusToSend.roll = newAngles[AXIS_ANGLE_X];
             statusToSend.yaw = newAngles[AXIS_ANGLE_Z];
 
             outputPid = pidCalculate(newAngles[AXIS_ANGLE_Y]) *-1; 
             outputMotors.motorL = outputPid * MAX_VELOCITY;
-            outputMotors.motorR=outputMotors.motorL;
+            outputMotors.motorR = outputMotors.motorL;
 
             // xQueueSend(outputMotorQueue,(void*) &outputMotors,0);                           // TODO: falta recibir los datos de esta cola y enviarlos a los motores
             setVelMotors(outputMotors.motorL,outputMotors.motorR);
@@ -82,7 +88,13 @@ static void imuControlHandler(void *pvParameters){
                 //Envio log para graficar en arduino serial plotter
                 printf("angle_x:%f,set_point: %f,output_pid: %f, output_motor:%d\n",newAngles[AXIS_ANGLE_Y],CENTER_ANGLE_MOUNTED,outputPid,outputMotors.motorL);
             }
-            gpio_set_level(13,0);
+            // gpio_set_level(PIN_OSCILO, 0);
+
+            cont++;
+            if(cont>10){
+                printf("angle:%f,set_point: %f,output_pid: %f, output_motor:%d\n",newAngles[AXIS_ANGLE_Y],CENTER_ANGLE_MOUNTED,outputPid,outputMotors.motorL);
+                cont=0;
+            }
         }
     }
 }
@@ -140,7 +152,6 @@ static void attitudeControl(void *pvParameters){
 }
 
 void app_main() {
-    // uint16_t distance = 0;
     uint8_t cont1=0;
     pid_params_t readParams={0};
 
@@ -159,14 +170,25 @@ void app_main() {
     printf("center: %f kp: %f , ki: %f , kd: %f,safetyLimits: %f\n",readParams.center_angle,readParams.kp,readParams.ki,readParams.kd,readParams.safety_limits);
     pidInit(readParams);
 
-    statusToSend.P = readParams.kp*100;
-    statusToSend.I = readParams.ki*100;
-    statusToSend.D = readParams.kd*100;
-    statusToSend.centerAngle = readParams.center_angle;
-    statusToSend.safetyLimits = readParams.safety_limits;
+    // setMicroSteps(true);
 
-    statusToSend.status_code = STATUS_ROBOT_DISABLE;
-    motorsInit();
+    // for(uint16_t i=0;i<1000;i++){
+    //     setVelMotors(i,i);
+
+    //     printf("vel: %d\n",i);
+    //     vTaskDelay(pdMS_TO_TICKS(10));
+    // }
+
+    // for(int i=1000;i>0;i--){
+    //     setVelMotors(i,i);
+    //     printf("vel: %d\n",i);
+    //     vTaskDelay(pdMS_TO_TICKS(10));
+    // }
+    // setVelMotors(0,0);
+
+    while(true){
+        vTaskDelay(10);
+    }
 
     // tfMiniInit();
     // canInit(GPIO_CAN_TX,GPIO_CAN_RX,UART_PORT_CAN);
@@ -178,16 +200,6 @@ void app_main() {
     setVelMotors(0,0);
 
     while(1){
-
-    //    printf("angleX: %f , angleY: %f\n",getAngle(AXIS_ANGLE_X),getAngle(AXIS_ANGLE_Y));
-
-        // distance = tfMiniGetDist();
-        // printf("angleX: %f  , distance: %d\n",angleX,distance);
-         
-        // float vNewAngles[3];
-        // if(xQueueReceive(newAnglesQueue,&vNewAngles,0)){
-        //     printf("angleX: %f \n",vNewAngles[0]);
-        // }
         
         if(btIsConnected()){
             cont1++;
