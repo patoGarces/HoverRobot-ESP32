@@ -2,6 +2,7 @@
 #include "soc/gpio_periph.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 #include "stdio.h"
 
 #include "main.h"
@@ -10,13 +11,9 @@
 #include "storage_flash.h"
 #include "stepper.h"
 
-
 /* Incluyo componentes */
 #include "../components/MPU6050/include/MPU6050.h"
-#include "../components/TFMINI/include/tfMini.h"
-#include "../components/CAN_COMM/include/CAN_COMMS.h"
 #include "../components/BT_CLASSIC/include/BT_CLASSIC.h"
-#include "../components/SBUS_RECEIVER/include/SBUS_RECEIVER.h"
 
 #define GRAPH_ARDUINO_PLOTTER   false
 #define MAX_VELOCITY            1000
