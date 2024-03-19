@@ -162,12 +162,24 @@ void app_main() {
     storageInit();
 
     btInit( DEVICE_BT_NAME );
-    mpu_init();
+
+    mpu6050_init_t mpuConfig = {
+        .sclGpio = GPIO_MPU_SCL,
+        .sdaGpio = GPIO_MPU_SDA,
+        .intGpio = GPIO_MPU_INT,
+        .sampleTimeInMs = PERIOD_IMU_MS,
+        .accelSensitivity = MPU_ACCEL_SENS_2G,
+        .gyroSensitivity = MPU_GYRO_SENS_250,
+        .priorityTask = configMAX_PRIORITIES - 1
+    };
+    mpuInit(mpuConfig);
     readParams = storageReadPidParams();
     printf("center: %f kp: %f , ki: %f , kd: %f,safetyLimits: %f\n",readParams.center_angle,readParams.kp,readParams.ki,readParams.kd,readParams.safety_limits);
     pidInit(readParams);
 
-    // setMicroSteps(true);
+    setMicroSteps(true);
+    motorsInit();
+    enableMotors();
 
     // for(uint16_t i=0;i<1000;i++){
     //     setVelMotors(i,i);
@@ -183,12 +195,9 @@ void app_main() {
     // }
     // setVelMotors(0,0);
 
-    while(true){
-        vTaskDelay(10);
-    }
-
-    // tfMiniInit();
-    // canInit(GPIO_CAN_TX,GPIO_CAN_RX,UART_PORT_CAN);
+    // while(true){
+    //     vTaskDelay(10);
+    // }
 
     xTaskCreatePinnedToCore(imuControlHandler,"Imu Control Task",4096,NULL,IMU_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);
     xTaskCreate(updateParams,"Update Params Task",2048,NULL,3,NULL);
