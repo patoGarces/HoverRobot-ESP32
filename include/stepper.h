@@ -4,6 +4,7 @@
 #include "stdint.h"
 
 
+// TODO: Mover a main.h
 #define GPIO_MOT_L_STEP     21
 #define GPIO_MOT_L_DIR      19
 #define GPIO_MOT_R_STEP     18

@@ -40,8 +40,11 @@
         "new": "c",
         "functional": "c",
         "uart.h": "c",
-        "i2c.h": "c"
+        "i2c.h": "c",
+        "ledc.h": "c",
+        "esp_task_wdt.h": "c",
+        "ets_sys.h": "c"
     },
-    "idf.portWin": "COM6",
+    "idf.portWin": "COM3",
     "idf.adapterTargetName": "esp32"
 }

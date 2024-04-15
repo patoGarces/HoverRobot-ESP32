@@ -6,8 +6,17 @@
 #include "esp_task_wdt.h"
 #include "driver/ledc.h"
 
+// NEMA 17 1/32
 #define FREQ_MIN  1500
-#define FREQ_MAX  7500
+#define FREQ_MAX  15000
+
+// // impresora 1/32
+// #define FREQ_MIN  3500
+// #define FREQ_MAX  7000
+
+// // impresora 1/1
+// #define FREQ_MIN  100
+// #define FREQ_MAX  500
 
 #define CPU_STEPPER     1
 
@@ -44,7 +53,7 @@ void motorsInit(void){
         .timer_num = TIMER_MOT_L,
         .clk_cfg = LEDC_USE_REF_TICK,
         .duty_resolution = LEDC_TIMER_4_BIT,
-        .freq_hz = 10000,
+        .freq_hz = FREQ_MIN,
     };
 
     ledc_timer_config(&timerConfig);            // Timer config motor L
@@ -58,7 +67,7 @@ void motorsInit(void){
         .channel = CHANNEL_MOT_L,
         .intr_type =  LEDC_INTR_DISABLE,
         .timer_sel = TIMER_MOT_L,
-        .duty = 8,                              // 50% de duty
+        .duty = 0,                              // 0 -> 0% de duty, 8 -> 50% de duty
         .hpoint = 0,
     };
     ledc_channel_config(&channelConfig);        // Channel config motor L
@@ -69,80 +78,67 @@ void motorsInit(void){
 
     ledc_channel_config(&channelConfig);        // Channel config motor R
 
-    // ledc_set_freq(SPEED_MODE_TIMER,TIMER_MOT_L,2000);
-
     ledc_timer_pause(SPEED_MODE_TIMER,TIMER_MOT_L);
     ledc_timer_pause(SPEED_MODE_TIMER,TIMER_MOT_R);
 
     disableMotors();
 }
 
-
 void enableMotors(void){
     gpio_set_level(GPIO_MOT_ENABLE,0);
     ledc_timer_resume(SPEED_MODE_TIMER,TIMER_MOT_L);
     ledc_timer_resume(SPEED_MODE_TIMER,TIMER_MOT_R);
+    printf("enable motors\n");
 }
 void disableMotors(void){
     gpio_set_level(GPIO_MOT_ENABLE,1);
     ledc_timer_pause(SPEED_MODE_TIMER,TIMER_MOT_L);
     ledc_timer_pause(SPEED_MODE_TIMER,TIMER_MOT_R);
+    printf("disable motors\n");
 }
 
-uint32_t cont = 0;
 void setVelMotors(int16_t speedL,int16_t speedR){
     uint32_t timerFreqL=0,timerFreqR=0;
 
     if( !speedL ){
-        ledc_timer_pause(SPEED_MODE_TIMER,TIMER_MOT_L);
+        ledc_set_duty(SPEED_MODE_TIMER,CHANNEL_MOT_L,0);
+        ledc_update_duty(SPEED_MODE_TIMER,CHANNEL_MOT_L);
+        // printf("MotorL pause\n");
     }
     else if( speedL <= 1000 && speedL >= -1000 ){
-
-        ledc_timer_resume(SPEED_MODE_TIMER,TIMER_MOT_L);
+        ledc_set_duty(SPEED_MODE_TIMER,CHANNEL_MOT_L,8);
+        ledc_update_duty(SPEED_MODE_TIMER,CHANNEL_MOT_L);
 
         timerFreqL = FREQ_MIN + (abs(speedL)*((FREQ_MAX-FREQ_MIN)/1000));
         ledc_set_freq(SPEED_MODE_TIMER,TIMER_MOT_L,timerFreqL);
-        // printf("speedL: %d , freqL :%ld\n",speedL,timerFreqL);
         
-        if(speedL < 0){
-            gpio_set_level(GPIO_MOT_L_DIR,1);
-        }
-        else{
-            gpio_set_level(GPIO_MOT_L_DIR,0);
-        }
+        gpio_set_level(GPIO_MOT_L_DIR,speedL < 0);
     }
     else{
         disableMotors();
+        printf("Error speedMotors -> DisableMotor\n");
     }
 
     if( !speedR ){
-        ledc_timer_pause(SPEED_MODE_TIMER,TIMER_MOT_R);
+        ledc_set_duty(SPEED_MODE_TIMER,CHANNEL_MOT_R,0);
+        ledc_update_duty(SPEED_MODE_TIMER,CHANNEL_MOT_R);
+        // printf("MotorR pause\n");
     }
     else if(speedR <= 1000 && speedR >= -1000){
-
-        ledc_timer_resume(SPEED_MODE_TIMER,TIMER_MOT_R);
+        ledc_set_duty(SPEED_MODE_TIMER,CHANNEL_MOT_R,8);
+        ledc_update_duty(SPEED_MODE_TIMER,CHANNEL_MOT_R);
 
         timerFreqR = FREQ_MIN + (abs(speedR)*((FREQ_MAX-FREQ_MIN)/1000));
         ledc_set_freq(SPEED_MODE_TIMER,TIMER_MOT_R,timerFreqR);
-        if(speedR < 0){
-            gpio_set_level(GPIO_MOT_R_DIR,0);
-        }
-        else{
-            gpio_set_level(GPIO_MOT_R_DIR,1);
-        }
+        gpio_set_level(GPIO_MOT_R_DIR,speedR < 0);
     }
     else{
         disableMotors();
+        printf("Error speedMotors -> DisableMotor\n");
     }
-
-    // cont++;
-    // if(cont>100){
-    //     printf("speedL: %d,speedR: %d, freqTimerL: %ld, freqTimerR: %ld\n",speedL,speedR,timerFreqL,timerFreqR);
-    //     cont=0;
-    // }
+    // printf("speedL: %d,speedR: %d, freqTimerL: %ld, freqTimerR: %ld\n",speedL,speedR,timerFreqL,timerFreqR);
 }
 
 void setMicroSteps(uint8_t fullStep){
     gpio_set_level(GPIO_MICRO_STEP, fullStep);
-
 }

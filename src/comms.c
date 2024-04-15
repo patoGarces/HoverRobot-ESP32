@@ -77,7 +77,19 @@ void communicationHandler(void * param){
 void sendStatus(status_robot_t status){
     // xQueueSend(queueSend,( void * ) &status, 0);
 
-    if (xStreamBufferSend(xStreamBufferSender, &status, sizeof(status), 1) != pdPASS) {
+    // if (xStreamBufferSend(xStreamBufferSender, &status, sizeof(status), 1) != pdPASS) {
+    //     /* TODO: Manejar el caso en el que el buffer está lleno y no se pueden enviar datos */
+    // }
+
+    
+    char SendAngleChar[50];
+
+    // sprintf(SendAngleChar,">angle:%f\n>outputMotor:%f\n",status.roundedAngle,status.speedL/100.0);
+    sprintf(SendAngleChar,">angle:%f\n",status.roundedAngle);
+
+    printf(SendAngleChar);
+           
+    if (xStreamBufferSend(xStreamBufferSender, &SendAngleChar, sizeof(SendAngleChar), 1) != pdPASS) {
         /* TODO: Manejar el caso en el que el buffer está lleno y no se pueden enviar datos */
     }
 }

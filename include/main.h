@@ -2,7 +2,7 @@
 #define __MAIN_H__
 #include "stdint.h"
 
-#define PERIOD_IMU_MS   10      
+#define PERIOD_IMU_MS   20//2.5      
 
 #define PIN_LED         2  //27 en mainBoard
 #define PIN_OSCILO      13
@@ -17,7 +17,9 @@
 #define GPIO_MPU_SDA        32
 #define GPIO_MPU_SCL        33
 
-#define IMU_HANDLER_PRIORITY    6
+#define MPU_HANDLER_PRIORITY    configMAX_PRIORITIES - 1
+
+#define IMU_HANDLER_PRIORITY    configMAX_PRIORITIES - 2
 #define IMU_HANDLER_CORE        1
 
 #define CENTER_ANGLE_MOUNTED    0.00  
