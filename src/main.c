@@ -12,8 +12,9 @@
 #include "storage_flash.h"
 #include "stepper.h"
 
+#include "mpu6050_wrapper.h"
 /* Incluyo componentes */
-#include "../components/MPU6050/include/MPU6050.h"
+// #include "../components/MPU6050/include/MPU6050.h"
 #include "../components/BT_CLASSIC/include/BT_CLASSIC.h"
 
 #define GRAPH_ARDUINO_PLOTTER   false
@@ -32,114 +33,114 @@ status_robot_t statusToSend;                            // Estructura que contie
 output_motors_t attitudeControlMotor;
 
 int16_t testMotor=0;
-static void imuControlHandler(void *pvParameters){
-    float newAngles[3];
-    output_motors_t outputMotors;
+// static void imuControlHandler(void *pvParameters){
+//     float newAngles[3];
+//     output_motors_t outputMotors;
 
-    outputMotorQueue = xQueueCreate(5,sizeof(output_motors_t));
+//     outputMotorQueue = xQueueCreate(5,sizeof(output_motors_t));
 
-    pidSetEnable();
+//     pidSetEnable();
 
-    while(1){
-        if(xQueueReceive(newAnglesQueue,&newAngles,pdMS_TO_TICKS(10))){
-            statusToSend.roll = newAngles[AXIS_ANGLE_X];
-            statusToSend.pitch = newAngles[AXIS_ANGLE_Y];
-            statusToSend.yaw = newAngles[AXIS_ANGLE_Z];
+//     while(1){
+//         if(xQueueReceive(newAnglesQueue,&newAngles,pdMS_TO_TICKS(10))){
+//             statusToSend.roll = newAngles[AXIS_ANGLE_X];
+//             statusToSend.pitch = newAngles[AXIS_ANGLE_Y];
+//             statusToSend.yaw = newAngles[AXIS_ANGLE_Z];
 
-            // float roundedAngle = roundf(newAngles[AXIS_ANGLE_Y] * 10) / 10; 
-            float roundedAngle = newAngles[AXIS_ANGLE_Y]; 
-            uint16_t outputPidMotors = (uint16_t)(pidCalculate(roundedAngle) * MAX_VELOCITY); 
+//             // float roundedAngle = roundf(newAngles[AXIS_ANGLE_Y] * 10) / 10; 
+//             float roundedAngle = newAngles[AXIS_ANGLE_Y]; 
+//             uint16_t outputPidMotors = (uint16_t)(pidCalculate(roundedAngle) * MAX_VELOCITY); 
 
-            statusToSend.roundedAngle = roundedAngle;
+//             statusToSend.roundedAngle = roundedAngle;
 
-            // if(roundedAngle > 1.00 || roundedAngle < -1.00) {
-            //     outputMotors.motorL = outputPidMotors;
-            //     outputMotors.motorR = outputPidMotors;
-            // }
-            // else {
-            //     outputMotors.motorL = 0;
-            //     outputMotors.motorR = 0;
-            // }
+//             // if(roundedAngle > 1.00 || roundedAngle < -1.00) {
+//             //     outputMotors.motorL = outputPidMotors;
+//             //     outputMotors.motorR = outputPidMotors;
+//             // }
+//             // else {
+//             //     outputMotors.motorL = 0;
+//             //     outputMotors.motorR = 0;
+//             // }
 
-            // setVelMotors(outputMotors.motorL,outputMotors.motorR);
+//             // setVelMotors(outputMotors.motorL,outputMotors.motorR);
 
-            // statusToSend.speedL = outputMotors.motorL;
-            // statusToSend.speedR = outputMotors.motorR;
+//             // statusToSend.speedL = outputMotors.motorL;
+//             // statusToSend.speedR = outputMotors.motorR;
 
-            // if (!pidGetEnable()) { 
-            //     if (((newAngles[AXIS_ANGLE_Y] > (CENTER_ANGLE_MOUNTED-1)) && (newAngles[AXIS_ANGLE_Y] < (CENTER_ANGLE_MOUNTED+1)))) { 
-            //         pidSetEnable();   
-            //         statusToSend.status_code = STATUS_ROBOT_STABILIZED;                                                   
-            //     }
-            //     else {
-            //         pidSetDisable();
-            //     }
-            // }
-            // else { 
-            //     if (((newAngles[AXIS_ANGLE_Y] < (CENTER_ANGLE_MOUNTED-statusToSend.safetyLimits)) || (newAngles[AXIS_ANGLE_Y] > (CENTER_ANGLE_MOUNTED+statusToSend.safetyLimits)))){ 
-            //         setVelMotors(0,0);
-            //         pidSetDisable();
-            //         statusToSend.status_code = STATUS_ROBOT_DISABLE; 
-            //     }
-            // }
-            // gpio_set_level(PIN_OSCILO, 0);
-        }
-    }
-}
+//             // if (!pidGetEnable()) { 
+//             //     if (((newAngles[AXIS_ANGLE_Y] > (CENTER_ANGLE_MOUNTED-1)) && (newAngles[AXIS_ANGLE_Y] < (CENTER_ANGLE_MOUNTED+1)))) { 
+//             //         pidSetEnable();   
+//             //         statusToSend.status_code = STATUS_ROBOT_STABILIZED;                                                   
+//             //     }
+//             //     else {
+//             //         pidSetDisable();
+//             //     }
+//             // }
+//             // else { 
+//             //     if (((newAngles[AXIS_ANGLE_Y] < (CENTER_ANGLE_MOUNTED-statusToSend.safetyLimits)) || (newAngles[AXIS_ANGLE_Y] > (CENTER_ANGLE_MOUNTED+statusToSend.safetyLimits)))){ 
+//             //         setVelMotors(0,0);
+//             //         pidSetDisable();
+//             //         statusToSend.status_code = STATUS_ROBOT_DISABLE; 
+//             //     }
+//             // }
+//             // gpio_set_level(PIN_OSCILO, 0);
+//         }
+//     }
+// }
 
-static void updateParams(void *pvParameters){
+// static void updateParams(void *pvParameters){
 
-    pid_params_t newPidParams;
+//     pid_params_t newPidParams;
 
-    queueNewPidParams = xQueueCreate(1,sizeof(pid_params_t));
+//     queueNewPidParams = xQueueCreate(1,sizeof(pid_params_t));
 
-    while (1){
+//     while (1){
         
-        if(xQueueReceive(queueNewPidParams,&newPidParams,0)){
-            newPidParams.center_angle += CENTER_ANGLE_MOUNTED;
-            pidSetConstants(newPidParams.kp,newPidParams.ki,newPidParams.kd);
-            pidSetSetPoint(newPidParams.center_angle);
-            storageWritePidParams(newPidParams);            
+//         if(xQueueReceive(queueNewPidParams,&newPidParams,0)){
+//             newPidParams.center_angle += CENTER_ANGLE_MOUNTED;
+//             pidSetConstants(newPidParams.kp,newPidParams.ki,newPidParams.kd);
+//             pidSetSetPoint(newPidParams.center_angle);
+//             storageWritePidParams(newPidParams);            
 
-            statusToSend.P = newPidParams.kp*100;  
-            statusToSend.I = newPidParams.ki*100;  
-            statusToSend.D = newPidParams.kd*100; 
-            statusToSend.centerAngle = newPidParams.center_angle;   
-            statusToSend.safetyLimits = newPidParams.safety_limits;   // TODO: incluir para enviarlo   
+//             statusToSend.P = newPidParams.kp*100;  
+//             statusToSend.I = newPidParams.ki*100;  
+//             statusToSend.D = newPidParams.kd*100; 
+//             statusToSend.centerAngle = newPidParams.center_angle;   
+//             statusToSend.safetyLimits = newPidParams.safety_limits;   // TODO: incluir para enviarlo   
 
-            printf("Nuevos parametros!, safety limits: %f\n",newPidParams.safety_limits);              
-        }
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
-}
+//             printf("Nuevos parametros!, safety limits: %f\n",newPidParams.safety_limits);              
+//         }
+//         vTaskDelay(pdMS_TO_TICKS(100));
+//     }
+// }
 
-static void attitudeControl(void *pvParameters){
+// static void attitudeControl(void *pvParameters){
 
-    queueReceiveControl = xQueueCreate(1, sizeof(control_app_t));
+//     queueReceiveControl = xQueueCreate(1, sizeof(control_app_t));
 
-    control_app_t newControlVal;
+//     control_app_t newControlVal;
 
-    while(true){
-        if( xQueueReceive(queueReceiveControl,
-                         &newControlVal,
-                         ( TickType_t ) 1 ) == pdPASS ){
+//     while(true){
+//         if( xQueueReceive(queueReceiveControl,
+//                          &newControlVal,
+//                          ( TickType_t ) 1 ) == pdPASS ){
 
-            attitudeControlMotor.motorL = newControlVal.axis_x * -1 * VEL_MAX_CONTROL + newControlVal.axis_y * -1 * VEL_MAX_CONTROL;
-            attitudeControlMotor.motorR = newControlVal.axis_x *  VEL_MAX_CONTROL + newControlVal.axis_y * -1 * VEL_MAX_CONTROL;
+//             attitudeControlMotor.motorL = newControlVal.axis_x * -1 * VEL_MAX_CONTROL + newControlVal.axis_y * -1 * VEL_MAX_CONTROL;
+//             attitudeControlMotor.motorR = newControlVal.axis_x *  VEL_MAX_CONTROL + newControlVal.axis_y * -1 * VEL_MAX_CONTROL;
             
-            setVelMotors(attitudeControlMotor.motorL,attitudeControlMotor.motorR);
+//             setVelMotors(attitudeControlMotor.motorL,attitudeControlMotor.motorR);
 
-            // if( !attitudeControlMotor.motorL && !attitudeControlMotor.motorR){
-            //     disableMotors();
-            // }
-            // else{
-            //     enableMotors();
-            // }
+//             // if( !attitudeControlMotor.motorL && !attitudeControlMotor.motorR){
+//             //     disableMotors();
+//             // }
+//             // else{
+//             //     enableMotors();
+//             // }
 
-            printf("CONTROL RECIBIDO: X: %ld, Y: %ld, motorL: %d ,motorR: %d \n",newControlVal.axis_x,newControlVal.axis_y,attitudeControlMotor.motorL,attitudeControlMotor.motorR);
-        } 
-    }
-}
+//             printf("CONTROL RECIBIDO: X: %ld, Y: %ld, motorL: %d ,motorR: %d \n",newControlVal.axis_x,newControlVal.axis_y,attitudeControlMotor.motorL,attitudeControlMotor.motorR);
+//         } 
+//     }
+// }
 
 void app_main() {
     uint8_t cont1=0;
@@ -156,17 +157,19 @@ void app_main() {
 
     btInit(DEVICE_BT_NAME);
 
-    mpu6050_init_t mpuConfig = {
-        .sclGpio = GPIO_MPU_SCL,
-        .sdaGpio = GPIO_MPU_SDA,
-        .intGpio = GPIO_MPU_INT,
-        .sampleTimeInMs = PERIOD_IMU_MS,
-        .accelSensitivity = MPU_ACCEL_SENS_16G,
-        .gyroSensitivity = MPU_GYRO_SENS_2000,
-        .lowPassFilterValue = MPU_LOW_PASS_FILTER_5HZ,
-        .priorityTask = MPU_HANDLER_PRIORITY
-    };
-    mpuInit(mpuConfig);
+    mpu6050_init();
+
+    // mpu6050_init_t mpuConfig = {
+    //     .sclGpio = GPIO_MPU_SCL,
+    //     .sdaGpio = GPIO_MPU_SDA,
+    //     .intGpio = GPIO_MPU_INT,
+    //     .sampleTimeInMs = PERIOD_IMU_MS,
+    //     .accelSensitivity = MPU_ACCEL_SENS_16G,
+    //     .gyroSensitivity = MPU_GYRO_SENS_2000,
+    //     .lowPassFilterValue = MPU_LOW_PASS_FILTER_5HZ,
+    //     .priorityTask = MPU_HANDLER_PRIORITY
+    // };
+    // mpuInit(mpuConfig);
     vTaskDelay(pdMS_TO_TICKS(5000));
     // mpuCalibrate();
     // readParams = storageReadPidParams();
@@ -215,9 +218,9 @@ void app_main() {
     //     vTaskDelay(1000);
     // }
 
-    xTaskCreatePinnedToCore(imuControlHandler,"Imu Control Task",4096,NULL,IMU_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);
-    xTaskCreate(updateParams,"Update Params Task",2048,NULL,3,NULL);
-    xTaskCreate(attitudeControl,"attitude control Task",2048,NULL,4,NULL);
+    // xTaskCreatePinnedToCore(imuControlHandler,"Imu Control Task",4096,NULL,IMU_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);
+    // xTaskCreate(updateParams,"Update Params Task",2048,NULL,3,NULL);
+    // xTaskCreate(attitudeControl,"attitude control Task",2048,NULL,4,NULL);
 
     setVelMotors(0,0);
 
