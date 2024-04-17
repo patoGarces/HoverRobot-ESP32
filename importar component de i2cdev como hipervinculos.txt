@@ -1,0 +1,8 @@
+Ejecutar el Símbolo del Sistema como Administrador: Intenta abrir el símbolo del sistema con permisos elevados. Haz clic derecho en el icono del símbolo del sistema y selecciona "Ejecutar como administrador". Luego, intenta nuevamente crear los hipervínculos.
+
+Modificar los Permisos de los Directorios: Si tienes acceso, puedes intentar modificar los permisos de los directorios relevantes para permitir la creación de hipervínculos. Haz clic derecho en el directorio components y selecciona "Propiedades". En la pestaña de "Seguridad", asegúrate de que tu usuario tenga permisos de escritura y modificación.
+
+Usar PowerShell: Puedes intentar crear los hipervínculos utilizando PowerShell en lugar del símbolo del sistema. Abre PowerShell como administrador y ejecuta los comandos siguientes:
+
+New-Item -ItemType SymbolicLink -Path "C:\Users\Patri\Desktop\Programacion\HoverRobotMainBoard\components\MPU6050" -Target "C:\Users\Patri\Desktop\Programacion\i2cdevlib\ESP32_ESP-IDF\components\MPU6050"
+New-Item -ItemType SymbolicLink -Path "C:\Users\Patri\Desktop\Programacion\HoverRobotMainBoard\components\I2Cdev" -Target "C:\Users\Patri\Desktop\Programacion\i2cdevlib\ESP32_ESP-IDF\components\I2Cdev"
