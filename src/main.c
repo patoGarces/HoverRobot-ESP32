@@ -33,7 +33,6 @@ status_robot_t statusToSend;                            // Estructura que contie
 
 output_motors_t attitudeControlMotor;
 
-int16_t testMotor=0;
 static void imuControlHandler(void *pvParameters){
     float newAngles[3];
     output_motors_t outputMotors;
@@ -146,6 +145,39 @@ static void imuControlHandler(void *pvParameters){
 // }
 
 
+void testHardwareVibration(){
+    uint8_t flagInc=true;
+    int16_t testMotor=0;
+
+    while(true) {
+        printf(">angle:%f\n>outputMotor:%f\n",statusToSend.roundedAngle/10.0,statusToSend.speedL/100.0);
+
+        // if(GRAPH_ARDUINO_PLOTTER){
+            //Envio log para graficar en arduino serial plotter
+            // printf("angle_x:%f,set_point: %f,output_pid: %f, output_motor:%d\n",newAngles[AXIS_ANGLE_Y],CENTER_ANGLE_MOUNTED,outputPid,outputMotors.motorL);
+        // }
+
+        if(flagInc){
+            testMotor++;
+            if(testMotor>99){
+                flagInc=false;
+            }
+        }
+        else {
+            testMotor--;
+            if(testMotor < -99){
+                flagInc=true;
+                setVelMotors(0,0);
+                break;
+            }
+        }
+        statusToSend.speedL = testMotor*10;
+        statusToSend.speedR = testMotor*10;
+        setVelMotors(statusToSend.speedL,statusToSend.speedR);
+        pdMS_TO_TICKS(50));
+    }
+}
+
 
 void app_main() {
     uint8_t cont1=0;
@@ -195,40 +227,23 @@ void app_main() {
 
     statusToSend.safetyLimits = readParams.safety_limits;
 
+    stepper_config_t configMotors = {
+        .gpio_mot_l_step = GPIO_MOT_L_STEP,
+        .gpio_mot_l_dir = GPIO_MOT_L_DIR,
+        .gpio_mot_r_step = GPIO_MOT_R_STEP,
+        .gpio_mot_r_dir = GPIO_MOT_R_DIR,
+        .gpio_mot_enable = GPIO_MOT_ENABLE,
+        .gpio_mot_microstepper = GPIO_MOT_MICRO_STEP
+    };
+    motorsInit(configMotors);
     setMicroSteps(true);
-    motorsInit();
-    // setVelMotors(250,250);
     enableMotors();
-
-    // while(true);
-
-    // for(uint16_t i=0;i<1000;i++){
-    //     setVelMotors(i,i);
-    //     printf("vel: %d\n",i);
-    //     vTaskDelay(pdMS_TO_TICKS(10));
-    // }
-
-    // for(int i=1000;i>0;i--){
-    //     setVelMotors(i,i);
-    //     printf("vel: %d\n",i);
-    //     vTaskDelay(pdMS_TO_TICKS(10));
-    // }
-    // setVelMotors(0,0);
-
-    // while(true){
-    //     // setMicroSteps(true);
-    //     // vTaskDelay(1000);
-    //     // setMicroSteps(false);
-    //     vTaskDelay(1000);
-    // }
 
     xTaskCreatePinnedToCore(imuControlHandler,"Imu Control Task",4096,NULL,IMU_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);
     // xTaskCreate(updateParams,"Update Params Task",2048,NULL,3,NULL);
     // xTaskCreate(attitudeControl,"attitude control Task",2048,NULL,4,NULL);
 
     setVelMotors(0,0);
-
-    uint8_t flagInc=true;
 
     while(1){
         
@@ -251,37 +266,6 @@ void app_main() {
         // gpio_set_level(PIN_LED,0);
         // vTaskDelay(pdMS_TO_TICKS(100));
 
-        // printf(">angle:%f\n",statusToSend.speedL/100.0);
-
-
-        // printf(">angle:%f\n",statusToSend.roundedAngle-80.0);
-        // printf(">outputMotor:%f\n",statusToSend.speedL/100.0);
-
-        printf(">angle:%f\n>outputMotor:%f\n",statusToSend.roundedAngle,statusToSend.speedL/100.0);
-
-        // printf("angle:%f,velTest:%d,outputPidMotors:%d\n",roundedAngle,testMotor*10,outputMotors.motorL);
-        // printf("angleX:%f,angleY:%f\n",newAngles[AXIS_ANGLE_X],newAngles[AXIS_ANGLE_Y]);
-
-        // if(GRAPH_ARDUINO_PLOTTER){
-            //Envio log para graficar en arduino serial plotter
-            // printf("angle_x:%f,set_point: %f,output_pid: %f, output_motor:%d\n",newAngles[AXIS_ANGLE_Y],CENTER_ANGLE_MOUNTED,outputPid,outputMotors.motorL);
-        // }
-
-        if(flagInc){
-            testMotor++;
-            if(testMotor>99){
-                flagInc=false;
-            }
-        }
-        else {
-            testMotor--;
-            if(testMotor < -99){
-                flagInc=true;
-                setVelMotors(0,0);
-            }
-        }
-        statusToSend.speedL = testMotor*10;
-        statusToSend.speedR = testMotor*10;
-        setVelMotors(statusToSend.speedL,statusToSend.speedR);
+        testHardwareVibration();
     }
 }

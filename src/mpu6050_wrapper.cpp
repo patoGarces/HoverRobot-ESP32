@@ -62,6 +62,10 @@ void mpu6050Handler(void*){
 			// printf("PITCH: %3.1f, ", ypr[1] * 180/M_PI);
 			// printf("ROLL: %3.1f \n", ypr[2] * 180/M_PI);
 
+			for(uint8_t i=0;i<3;i++){
+				ypr[i] = ypr[i] * 180 / M_PI;
+			}
+
             xQueueSend(newAnglesQueue,( void * ) &ypr, 1);
 	    }
 

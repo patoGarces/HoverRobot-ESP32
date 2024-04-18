@@ -27,25 +27,33 @@
 #define CHANNEL_MOT_L       LEDC_CHANNEL_0
 #define CHANNEL_MOT_R       LEDC_CHANNEL_1
 
-void motorsInit(void){
+static uint8_t gpioEnable,gpioDirR,gpioDirL,gpiouStepping;
+
+void motorsInit(stepper_config_t config){
+
+    gpioEnable = config.gpio_mot_enable;
+    gpioDirR = config.gpio_mot_r_dir;
+    gpioDirL = config.gpio_mot_l_dir;
+    gpiouStepping = config.gpio_mot_microstepper;
+
     /* seteo pines de salida de steps */
     gpio_config_t pinesMotor={
         .intr_type = GPIO_INTR_DISABLE,
         .mode = GPIO_MODE_OUTPUT,
-        .pin_bit_mask = ( 1 << GPIO_MOT_L_DIR),
+        .pin_bit_mask = ( 1 << config.gpio_mot_l_dir),
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .pull_up_en = GPIO_PULLUP_DISABLE
     };
     gpio_config(&pinesMotor);
 
-    pinesMotor.pin_bit_mask = (1 << GPIO_MOT_R_DIR);
+    pinesMotor.pin_bit_mask = (1 << config.gpio_mot_r_dir);
     gpio_config(&pinesMotor);
 
     /* seteo pines de salida de enable*/
-    pinesMotor.pin_bit_mask = (1 << GPIO_MOT_ENABLE);
+    pinesMotor.pin_bit_mask = (1 << config.gpio_mot_enable);
     gpio_config(&pinesMotor);
 
-    pinesMotor.pin_bit_mask = (1 << GPIO_MICRO_STEP);
+    pinesMotor.pin_bit_mask = (1 << config.gpio_mot_microstepper);
     gpio_config(&pinesMotor);
 
     ledc_timer_config_t timerConfig={
@@ -62,7 +70,7 @@ void motorsInit(void){
     ledc_timer_config(&timerConfig);            // Timer config motor R
 
     ledc_channel_config_t channelConfig = {
-        .gpio_num = GPIO_MOT_L_STEP,
+        .gpio_num = config.gpio_mot_l_step,
         .speed_mode = SPEED_MODE_TIMER,
         .channel = CHANNEL_MOT_L,
         .intr_type =  LEDC_INTR_DISABLE,
@@ -72,7 +80,7 @@ void motorsInit(void){
     };
     ledc_channel_config(&channelConfig);        // Channel config motor L
 
-    channelConfig.gpio_num = GPIO_MOT_R_STEP;
+    channelConfig.gpio_num = config.gpio_mot_r_step;
     channelConfig.channel = CHANNEL_MOT_R;
     channelConfig.timer_sel = TIMER_MOT_R;
 
@@ -82,16 +90,17 @@ void motorsInit(void){
     ledc_timer_pause(SPEED_MODE_TIMER,TIMER_MOT_R);
 
     disableMotors();
+    setVelMotors(0,0);
 }
 
 void enableMotors(void){
-    gpio_set_level(GPIO_MOT_ENABLE,0);
+    gpio_set_level(gpioEnable,0);
     ledc_timer_resume(SPEED_MODE_TIMER,TIMER_MOT_L);
     ledc_timer_resume(SPEED_MODE_TIMER,TIMER_MOT_R);
     printf("enable motors\n");
 }
 void disableMotors(void){
-    gpio_set_level(GPIO_MOT_ENABLE,1);
+    gpio_set_level(gpioEnable,1);
     ledc_timer_pause(SPEED_MODE_TIMER,TIMER_MOT_L);
     ledc_timer_pause(SPEED_MODE_TIMER,TIMER_MOT_R);
     printf("disable motors\n");
@@ -112,7 +121,7 @@ void setVelMotors(int16_t speedL,int16_t speedR){
         timerFreqL = FREQ_MIN + (abs(speedL)*((FREQ_MAX-FREQ_MIN)/1000));
         ledc_set_freq(SPEED_MODE_TIMER,TIMER_MOT_L,timerFreqL);
         
-        gpio_set_level(GPIO_MOT_L_DIR,speedL < 0);
+        gpio_set_level(gpioDirL,speedL < 0);
     }
     else{
         disableMotors();
@@ -130,7 +139,7 @@ void setVelMotors(int16_t speedL,int16_t speedR){
 
         timerFreqR = FREQ_MIN + (abs(speedR)*((FREQ_MAX-FREQ_MIN)/1000));
         ledc_set_freq(SPEED_MODE_TIMER,TIMER_MOT_R,timerFreqR);
-        gpio_set_level(GPIO_MOT_R_DIR,speedR < 0);
+        gpio_set_level(gpioDirR,speedR < 0);
     }
     else{
         disableMotors();
@@ -140,5 +149,5 @@ void setVelMotors(int16_t speedL,int16_t speedR){
 }
 
 void setMicroSteps(uint8_t fullStep){
-    gpio_set_level(GPIO_MICRO_STEP, fullStep);
+    gpio_set_level(gpiouStepping, fullStep);
 }

@@ -17,6 +17,14 @@
 #define GPIO_MPU_SDA        32
 #define GPIO_MPU_SCL        33
 
+#define GPIO_MOT_L_STEP     21
+#define GPIO_MOT_L_DIR      19
+#define GPIO_MOT_R_STEP     18
+#define GPIO_MOT_R_DIR      5
+#define GPIO_MOT_ENABLE     14
+#define GPIO_MOT_MICRO_STEP 12
+
+
 #define MPU_HANDLER_PRIORITY    configMAX_PRIORITIES - 1
 
 #define IMU_HANDLER_PRIORITY    configMAX_PRIORITIES - 2
