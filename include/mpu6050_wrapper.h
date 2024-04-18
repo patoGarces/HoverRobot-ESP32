@@ -20,6 +20,12 @@ typedef struct {
     float z;
 } vector_float_wrapper_t;
 
+enum {
+    AXIS_ANGLE_X,
+    AXIS_ANGLE_Y,
+    AXIS_ANGLE_Z
+};
+
 void mpu6050_initialize();
 int mpu6050_testConnection();
 
