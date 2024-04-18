@@ -45,6 +45,6 @@
         "esp_task_wdt.h": "c",
         "ets_sys.h": "c"
     },
-    "idf.portWin": "COM3",
+    "idf.portWin": "COM9",
     "idf.adapterTargetName": "esp32"
 }

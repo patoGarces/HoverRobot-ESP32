@@ -6,6 +6,8 @@
 #include "stdio.h"
 #include "math.h"
 
+#include "driver/i2c.h"
+
 #include "main.h"
 #include "comms.h"
 #include "PID.h"
@@ -142,6 +144,99 @@ int16_t testMotor=0;
 //     }
 // }
 
+
+
+
+#define PIN_SDA        32
+#define PIN_CLK        33
+
+quaternion_wrapper_t q;             // [w, x, y, z]         quaternion container
+vector_float_wrapper_t gravity;     // [x, y, z]            gravity vector
+
+
+// Quaternion q;           // [w, x, y, z]         quaternion container
+// VectorFloat gravity;    // [x, y, z]            gravity vector
+float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
+uint16_t packetSize = 42;    // expected DMP packet size (default is 42 bytes)
+uint16_t fifoCount;     // count of all bytes currently in FIFO
+uint8_t fifoBuffer[64]; // FIFO storage buffer
+uint8_t mpuIntStatus;   // holds actual interrupt status byte from MPU
+
+void task_initI2C(void *ignore) {
+	i2c_config_t conf;
+	conf.mode = I2C_MODE_MASTER;
+	conf.sda_io_num = (gpio_num_t)PIN_SDA;
+	conf.scl_io_num = (gpio_num_t)PIN_CLK;
+	conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
+	conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
+	conf.master.clk_speed = 400000;
+	ESP_ERROR_CHECK(i2c_param_config(I2C_NUM_0, &conf));
+	ESP_ERROR_CHECK(i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0));
+	vTaskDelete(NULL);
+}
+
+void task_display(void*){
+	mpu6050_initialize();
+	mpu6050_dmpInitialize();    // retorna 0 si la inicializacion fue exitosa
+
+	// This need to be setup individually
+	// mpu.setXGyroOffset(220);
+	// mpu.setYGyroOffset(76);
+	// mpu.setZGyroOffset(-85);
+	// mpu.setZAccelOffset(1788);
+    mpu6050_calibrateAccel(6);
+    mpu6050_calibrateGyro(6);
+
+	mpu6050_setDMPEnabled(true);
+
+	while(1){
+	    mpuIntStatus = mpu6050_getIntStatus();
+		// get current FIFO count
+		fifoCount = mpu6050_getFIFOCount();
+
+	    if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
+	        // reset so we can continue cleanly
+	        mpu6050_resetFIFO();
+
+	    // otherwise, check for DMP data ready interrupt frequently)
+	    } else if (mpuIntStatus & 0x02) {
+	        // wait for correct available data length, should be a VERY short wait
+	        while (fifoCount < packetSize) fifoCount = mpu6050_getFIFOCount();
+
+	        // read a packet from FIFO
+
+	        mpu6050_getFIFOBytes(fifoBuffer, packetSize);
+            mpu6050_dmpGetQuaternion(&q,fifoBuffer);
+            mpu6050_dmpGetGravity(&gravity,&q);
+            mpu6050_dmpGetYawPitchRoll(ypr,&q,&gravity);
+
+            // printf("Quaterniones> w: %f, x:%f,y:%f,z:%f\n",q.w,q.x,q.y,q.z);
+            // printf("gravity> x: %f, y:%f,z:%f\n",gravity.x,gravity.y,gravity.z);
+
+	 		// mpu.dmpGetQuaternion(&q, fifoBuffer);
+			// mpu.dmpGetGravity(&gravity, &q);
+			// mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
+			printf("YAW: %3.1f, ", ypr[0] * 180/M_PI);
+			printf("PITCH: %3.1f, ", ypr[1] * 180/M_PI);
+			printf("ROLL: %3.1f \n", ypr[2] * 180/M_PI);
+	    }
+
+	    //Best result is to match with DMP refresh rate
+	    // Its last value in components/MPU6050/MPU6050_6Axis_MotionApps20.h file line 310
+	    // Now its 0x13, which means DMP is refreshed with 10Hz rate
+		// vTaskDelay(5/portTICK_PERIOD_MS);
+	}
+
+	vTaskDelete(NULL);
+}
+
+
+
+
+
+
+
+
 void app_main() {
     uint8_t cont1=0;
     pid_params_t readParams={0};
@@ -157,8 +252,6 @@ void app_main() {
 
     btInit(DEVICE_BT_NAME);
 
-    mpu6050_init();
-
     // mpu6050_init_t mpuConfig = {
     //     .sclGpio = GPIO_MPU_SCL,
     //     .sdaGpio = GPIO_MPU_SDA,
@@ -170,31 +263,31 @@ void app_main() {
     //     .priorityTask = MPU_HANDLER_PRIORITY
     // };
     // mpuInit(mpuConfig);
-    vTaskDelay(pdMS_TO_TICKS(5000));
+    // vTaskDelay(pdMS_TO_TICKS(5000));
     // mpuCalibrate();
     // readParams = storageReadPidParams();
 
-    readParams.kp = 1.00;
-    readParams.ki = 0.0;
-    readParams.kd = 0.3;
-    readParams.safety_limits = 50;
-    printf("center: %f kp: %f , ki: %f , kd: %f,safetyLimits: %f\n",readParams.center_angle,readParams.kp,readParams.ki,readParams.kd,readParams.safety_limits);
+    // readParams.kp = 1.00;
+    // readParams.ki = 0.0;
+    // readParams.kd = 0.3;
+    // readParams.safety_limits = 50;
+    // printf("center: %f kp: %f , ki: %f , kd: %f,safetyLimits: %f\n",readParams.center_angle,readParams.kp,readParams.ki,readParams.kd,readParams.safety_limits);
     
-    pid_init_t pidConfig = {
-        .kp = readParams.kp,
-        .ki = readParams.ki,
-        .kd = readParams.kd,
-        .initSetPoint = readParams.center_angle,
-        .sampleTimeInMs = PERIOD_IMU_MS,
-    };
-    pidInit(pidConfig);
+    // pid_init_t pidConfig = {
+    //     .kp = readParams.kp,
+    //     .ki = readParams.ki,
+    //     .kd = readParams.kd,
+    //     .initSetPoint = readParams.center_angle,
+    //     .sampleTimeInMs = PERIOD_IMU_MS,
+    // };
+    // pidInit(pidConfig);
 
     statusToSend.safetyLimits = readParams.safety_limits;
 
-    setMicroSteps(true);
-    motorsInit();
+    // setMicroSteps(true);
+    // motorsInit();
     // setVelMotors(250,2  50);
-    enableMotors();
+    // enableMotors();
 
     // while(true);
 
@@ -221,6 +314,13 @@ void app_main() {
     // xTaskCreatePinnedToCore(imuControlHandler,"Imu Control Task",4096,NULL,IMU_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);
     // xTaskCreate(updateParams,"Update Params Task",2048,NULL,3,NULL);
     // xTaskCreate(attitudeControl,"attitude control Task",2048,NULL,4,NULL);
+
+
+    xTaskCreatePinnedToCore(task_initI2C,"task_initi2c",4096,NULL,5,NULL,IMU_HANDLER_CORE);
+    xTaskCreatePinnedToCore(task_display,"task_display",4096,NULL,5,NULL,IMU_HANDLER_CORE);
+    while(true) {
+        vTaskDelay(100);
+    }
 
     setVelMotors(0,0);
 
