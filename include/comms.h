@@ -2,6 +2,7 @@
 #define __COMMS_H__
 
 #include "stdio.h"
+#include "main.h"
 
 #define HEADER_COMMS            0xABC0
 #define HEADER_TX_KEY_STATUS    0xAB01          // key a enviar que indica que el paquete enviado a la app es un status
@@ -48,12 +49,8 @@ typedef struct{
     float    pitch;
     float    roll;
     float    yaw;
-    float    centerAngle;
-    float    roundedAngle;
-    uint16_t safetyLimits;
-    uint16_t P;
-    uint16_t I;
-    uint16_t D;
+    pid_params_t pid;
+    float    setPoint;
     uint16_t orden_code;
     uint16_t status_code;
     uint16_t checksum;

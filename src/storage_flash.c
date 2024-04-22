@@ -25,9 +25,8 @@ void eraseFlash(){
 
 void storageWritePidParams(pid_params_t params){
 
-     printf("Guardando parametros PID: KP = %f, KI = %f, KD = %f, center = %f, safetyLimits: %f\n", params.kp,params.ki,params.kd,params.center_angle,params.safety_limits);
+    //  printf("Guardando parametros PID: KP = %f, KI = %f, KD = %f, center = %f, safetyLimits: %f\n", params.kp,params.ki,params.kd,params.center_angle,params.safety_limits);
                 
-
     esp_err_t err = nvs_open(NAMESPACE1,NVS_READWRITE,&storageHandle);
     if( err != ESP_OK){
         printf("ERROR ESCRITURA STORAGEWRITEPIDPARAMS 1\n");
@@ -37,8 +36,8 @@ void storageWritePidParams(pid_params_t params){
     nvs_set_u16(storageHandle,KEY_KP,(uint16_t)(params.kp*100));
     nvs_set_u16(storageHandle,KEY_KI,(uint16_t)(params.ki*100));
     nvs_set_u16(storageHandle,KEY_KD,(uint16_t)(params.kd*100));
-    nvs_set_i16(storageHandle,KEY_CENTER,(int16_t)(params.center_angle*100));
-    nvs_set_u16(storageHandle,KEY_SAFETY_LIM,(uint16_t)(params.safety_limits*100));
+    nvs_set_i16(storageHandle,KEY_CENTER,(int16_t)(params.centerAngle*100));
+    nvs_set_u16(storageHandle,KEY_SAFETY_LIM,(uint16_t)(params.safetyLimits*100));
 
     if( nvs_commit(storageHandle) != ESP_OK ){
         printf("ERROR ESCRITURA STORAGEWRITEPIDPARAMS 2\n");
@@ -82,8 +81,8 @@ pid_params_t storageReadPidParams(void){
     readParams.kp = (float)kp/100;
     readParams.ki = (float)ki/100;
     readParams.kd = (float)kd/100;
-    readParams.center_angle = (float)centerAngle/100;
-    readParams.safety_limits = (float)safetyLimits/100;
+    readParams.centerAngle = (float)centerAngle/100;
+    readParams.safetyLimits = (float)safetyLimits/100;
 
     nvs_close(storageHandle);
     return readParams;

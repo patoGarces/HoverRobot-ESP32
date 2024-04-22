@@ -2,14 +2,7 @@
 #define __STORAGE_FLASH_H__
 
 #include "stdio.h"
-
-typedef struct{
-    float kp;
-    float ki;
-    float kd;
-    float center_angle;
-    float safety_limits;
-}pid_params_t;
+#include "main.h"
 
 void storageInit(void);
 void storageWritePidParams(pid_params_t params);

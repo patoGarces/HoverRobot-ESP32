@@ -44,118 +44,100 @@ static void imuControlHandler(void *pvParameters){
     while(1){
         if(xQueueReceive(newAnglesQueue,&newAngles,pdMS_TO_TICKS(10))){
 
-            // printf("Angulos recibidos del DMP a traves de la colaaaaaa\n");
             statusToSend.roll = newAngles[AXIS_ANGLE_X];
             statusToSend.pitch = newAngles[AXIS_ANGLE_Y];
             statusToSend.yaw = newAngles[AXIS_ANGLE_Z];
 
-            // float roundedAngle = roundf(newAngles[AXIS_ANGLE_Y] * 10) / 10; 
-            float roundedAngle = newAngles[AXIS_ANGLE_Y]; 
-            uint16_t outputPidMotors = (uint16_t)(pidCalculate(roundedAngle) * MAX_VELOCITY); 
+            uint16_t outputPidMotors = (uint16_t)(pidCalculate(statusToSend.pitch) * MAX_VELOCITY); 
 
-            statusToSend.roundedAngle = roundedAngle;
+            if(outputPidMotors > 50 || statusToSend.pitch < -50) {
+                outputMotors.motorL = outputPidMotors;
+                outputMotors.motorR = outputPidMotors;
+            }
+            else {
+                outputMotors.motorL = 0;
+                outputMotors.motorR = 0;
+            }
 
-            // if(roundedAngle > 1.00 || roundedAngle < -1.00) {
-            //     outputMotors.motorL = outputPidMotors;
-            //     outputMotors.motorR = outputPidMotors;
-            // }
-            // else {
-            //     outputMotors.motorL = 0;
-            //     outputMotors.motorR = 0;
-            // }
+            setVelMotors(outputMotors.motorL,outputMotors.motorR);
 
-            // setVelMotors(outputMotors.motorL,outputMotors.motorR);
+            statusToSend.speedL = outputMotors.motorL;
+            statusToSend.speedR = outputMotors.motorR;
 
-            // statusToSend.speedL = outputMotors.motorL;
-            // statusToSend.speedR = outputMotors.motorR;
-
-            // if (!pidGetEnable()) { 
-            //     if (((newAngles[AXIS_ANGLE_Y] > (CENTER_ANGLE_MOUNTED-1)) && (newAngles[AXIS_ANGLE_Y] < (CENTER_ANGLE_MOUNTED+1)))) { 
-            //         pidSetEnable();   
-            //         statusToSend.status_code = STATUS_ROBOT_STABILIZED;                                                   
-            //     }
-            //     else {
-            //         pidSetDisable();
-            //     }
-            // }
-            // else { 
-            //     if (((newAngles[AXIS_ANGLE_Y] < (CENTER_ANGLE_MOUNTED-statusToSend.safetyLimits)) || (newAngles[AXIS_ANGLE_Y] > (CENTER_ANGLE_MOUNTED+statusToSend.safetyLimits)))){ 
-            //         setVelMotors(0,0);
-            //         pidSetDisable();
-            //         statusToSend.status_code = STATUS_ROBOT_DISABLE; 
-            //     }
-            // }
+            if (!pidGetEnable()) { 
+                if (((newAngles[AXIS_ANGLE_Y] > (CENTER_ANGLE_MOUNTED-1)) && (newAngles[AXIS_ANGLE_Y] < (CENTER_ANGLE_MOUNTED+1)))) { 
+                    pidSetEnable();   
+                    statusToSend.status_code = STATUS_ROBOT_STABILIZED;                                                   
+                }
+                else {
+                    pidSetDisable();
+                }
+            }
+            else { 
+                if (((newAngles[AXIS_ANGLE_Y] < (CENTER_ANGLE_MOUNTED-statusToSend.pid.safetyLimits)) || (newAngles[AXIS_ANGLE_Y] > (CENTER_ANGLE_MOUNTED+statusToSend.pid.safetyLimits)))){ 
+                    setVelMotors(0,0);
+                    pidSetDisable();
+                    statusToSend.status_code = STATUS_ROBOT_DISABLE; 
+                }
+            }
             // gpio_set_level(PIN_OSCILO, 0);
         }
     }
 }
 
-// static void updateParams(void *pvParameters){
+static void updateParams(void *pvParameters){
 
-//     pid_params_t newPidParams;
+    pid_params_t newPidParams;
 
-//     queueNewPidParams = xQueueCreate(1,sizeof(pid_params_t));
+    queueNewPidParams = xQueueCreate(1,sizeof(pid_params_t));
 
-//     while (1){
+    while (1){
         
-//         if(xQueueReceive(queueNewPidParams,&newPidParams,0)){
-//             newPidParams.center_angle += CENTER_ANGLE_MOUNTED;
-//             pidSetConstants(newPidParams.kp,newPidParams.ki,newPidParams.kd);
-//             pidSetSetPoint(newPidParams.center_angle);
-//             storageWritePidParams(newPidParams);            
+        if(xQueueReceive(queueNewPidParams,&newPidParams,0)){
+            newPidParams.centerAngle += CENTER_ANGLE_MOUNTED;
+            pidSetConstants(newPidParams.kp,newPidParams.ki,newPidParams.kd);
+            pidSetSetPoint(newPidParams.centerAngle);
+            storageWritePidParams(newPidParams);            
 
-//             statusToSend.P = newPidParams.kp*100;  
-//             statusToSend.I = newPidParams.ki*100;  
-//             statusToSend.D = newPidParams.kd*100; 
-//             statusToSend.centerAngle = newPidParams.center_angle;   
-//             statusToSend.safetyLimits = newPidParams.safety_limits;   // TODO: incluir para enviarlo   
+            statusToSend.pid = newPidParams;
+            printf("\nNuevos parametros:\n\tP: %f\n\tI: %f\n\tD: %f,\n\tcenter: %f\n\tsafety limits: %f\n\n",newPidParams.kp,newPidParams.ki,newPidParams.kd,newPidParams.centerAngle,newPidParams.safetyLimits);              
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
 
-//             printf("Nuevos parametros!, safety limits: %f\n",newPidParams.safety_limits);              
-//         }
-//         vTaskDelay(pdMS_TO_TICKS(100));
-//     }
-// }
+static void attitudeControl(void *pvParameters){
 
-// static void attitudeControl(void *pvParameters){
+    queueReceiveControl = xQueueCreate(1, sizeof(control_app_t));
 
-//     queueReceiveControl = xQueueCreate(1, sizeof(control_app_t));
+    control_app_t newControlVal;
 
-//     control_app_t newControlVal;
+    while(true){
+        if( xQueueReceive(queueReceiveControl,
+                         &newControlVal,
+                         ( TickType_t ) 1 ) == pdPASS ){
 
-//     while(true){
-//         if( xQueueReceive(queueReceiveControl,
-//                          &newControlVal,
-//                          ( TickType_t ) 1 ) == pdPASS ){
+            // Prueba directa control de motores:
+            // attitudeControlMotor.motorL = newControlVal.axis_x * -1 * VEL_MAX_CONTROL + newControlVal.axis_y * -1 * VEL_MAX_CONTROL;
+            // attitudeControlMotor.motorR = newControlVal.axis_x *  VEL_MAX_CONTROL + newControlVal.axis_y * -1 * VEL_MAX_CONTROL;
+            // setVelMotors(attitudeControlMotor.motorL,attitudeControlMotor.motorR);
 
-//             attitudeControlMotor.motorL = newControlVal.axis_x * -1 * VEL_MAX_CONTROL + newControlVal.axis_y * -1 * VEL_MAX_CONTROL;
-//             attitudeControlMotor.motorR = newControlVal.axis_x *  VEL_MAX_CONTROL + newControlVal.axis_y * -1 * VEL_MAX_CONTROL;
-            
-//             setVelMotors(attitudeControlMotor.motorL,attitudeControlMotor.motorR);
+            float setPoint = (newControlVal.axis_y / 100.00) * 5.00; // Max 5 grados
 
-//             // if( !attitudeControlMotor.motorL && !attitudeControlMotor.motorR){
-//             //     disableMotors();
-//             // }
-//             // else{
-//             //     enableMotors();
-//             // }
-
-//             printf("CONTROL RECIBIDO: X: %ld, Y: %ld, motorL: %d ,motorR: %d \n",newControlVal.axis_x,newControlVal.axis_y,attitudeControlMotor.motorL,attitudeControlMotor.motorR);
-//         } 
-//     }
-// }
+            statusToSend.setPoint = setPoint;
+            pidSetSetPoint(setPoint);
+        } 
+    }
+}
 
 
 void testHardwareVibration(){
     uint8_t flagInc=true;
     int16_t testMotor=0;
 
+    // vTaskDelay(pdMS_TO_TICKS(5000));
     while(true) {
-        printf(">angle:%f\n>outputMotor:%f\n",statusToSend.roundedAngle/10.0,statusToSend.speedL/100.0);
-
-        // if(GRAPH_ARDUINO_PLOTTER){
-            //Envio log para graficar en arduino serial plotter
-            // printf("angle_x:%f,set_point: %f,output_pid: %f, output_motor:%d\n",newAngles[AXIS_ANGLE_Y],CENTER_ANGLE_MOUNTED,outputPid,outputMotors.motorL);
-        // }
+        printf(">angle:%f\n>outputMotor:%f\n",statusToSend.pitch/10.0,statusToSend.speedL/100.0);
 
         if(flagInc){
             testMotor++;
@@ -168,13 +150,13 @@ void testHardwareVibration(){
             if(testMotor < -99){
                 flagInc=true;
                 setVelMotors(0,0);
-                break;
+                // break;
             }
         }
         statusToSend.speedL = testMotor*10;
         statusToSend.speedR = testMotor*10;
         setVelMotors(statusToSend.speedL,statusToSend.speedR);
-        pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
 
@@ -195,37 +177,25 @@ void app_main() {
     btInit(DEVICE_BT_NAME);
 
     mpu6050_initialize();
-    // mpu6050_init_t mpuConfig = {
-    //     .sclGpio = GPIO_MPU_SCL,
-    //     .sdaGpio = GPIO_MPU_SDA,
-    //     .intGpio = GPIO_MPU_INT,
-    //     .sampleTimeInMs = PERIOD_IMU_MS,
-    //     .accelSensitivity = MPU_ACCEL_SENS_16G,
-    //     .gyroSensitivity = MPU_GYRO_SENS_2000,
-    //     .lowPassFilterValue = MPU_LOW_PASS_FILTER_5HZ,
-    //     .priorityTask = MPU_HANDLER_PRIORITY
-    // };
-    // mpuInit(mpuConfig);
-    // vTaskDelay(pdMS_TO_TICKS(5000));
-    // mpuCalibrate();
-    readParams = storageReadPidParams();
 
-    readParams.kp = 1.00;
-    readParams.ki = 0.0;
-    readParams.kd = 0.3;
-    readParams.safety_limits = 50;
-    printf("center: %f kp: %f , ki: %f , kd: %f,safetyLimits: %f\n",readParams.center_angle,readParams.kp,readParams.ki,readParams.kd,readParams.safety_limits);
+    readParams = storageReadPidParams();
+    // TODO: Eliminar
+    readParams.kp = 10.0;
+    readParams.ki = 4;
+    readParams.kd = 0.5;
+    readParams.safetyLimits = 50;
+    readParams.centerAngle = 0.0;
+    statusToSend.pid = readParams;
+    printf("Hardcode Params: center: %f kp: %f , ki: %f , kd: %f,safetyLimits: %f,centerAngle: %f\n",readParams.centerAngle,readParams.kp,readParams.ki,readParams.kd,readParams.safetyLimits,readParams.centerAngle);
     
     pid_init_t pidConfig = {
         .kp = readParams.kp,
         .ki = readParams.ki,
         .kd = readParams.kd,
-        .initSetPoint = readParams.center_angle,
+        .initSetPoint = readParams.centerAngle,
         .sampleTimeInMs = PERIOD_IMU_MS,
     };
     pidInit(pidConfig);
-
-    statusToSend.safetyLimits = readParams.safety_limits;
 
     stepper_config_t configMotors = {
         .gpio_mot_l_step = GPIO_MOT_L_STEP,
@@ -240,32 +210,42 @@ void app_main() {
     enableMotors();
 
     xTaskCreatePinnedToCore(imuControlHandler,"Imu Control Task",4096,NULL,IMU_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);
-    // xTaskCreate(updateParams,"Update Params Task",2048,NULL,3,NULL);
-    // xTaskCreate(attitudeControl,"attitude control Task",2048,NULL,4,NULL);
+    xTaskCreate(updateParams,"Update Params Task",2048,NULL,3,NULL);
+    xTaskCreate(attitudeControl,"attitude control Task",2048,NULL,4,NULL);
 
     setVelMotors(0,0);
 
-    while(1){
+    while(1) {
         
-        // if(btIsConnected()){
-        //     cont1++;
-        //     if(cont1>50){
-        //         cont1 =0;
-        //     }
-        //     statusToSend.header = HEADER_COMMS;
-        //     statusToSend.bat_voltage = 10;
-        //     statusToSend.bat_percent = 55;
-        //     statusToSend.batTemp = 100-cont1;
-        //     statusToSend.temp_uc_control = cont1;
-        //     statusToSend.temp_uc_main = 123-cont1; 
-        //     // statusToSend.status_code = 0;
-        //     sendStatus(statusToSend);
-        // }
+        if (btIsConnected()) {
+            cont1++;
+            if(cont1>50){
+                cont1 =0;
+            }
+            statusToSend.header = HEADER_COMMS;
+            statusToSend.bat_voltage = 10;
+            statusToSend.bat_percent = 55;
+            statusToSend.batTemp = 100-cont1;
+            statusToSend.temp_uc_control = cont1;
+            statusToSend.temp_uc_main = 123-cont1; 
+            // statusToSend.status_code = 0;
+
+            sendStatus(statusToSend);
+        }
         // gpio_set_level(PIN_LED,1);
         vTaskDelay(pdMS_TO_TICKS(50));
         // gpio_set_level(PIN_LED,0);
         // vTaskDelay(pdMS_TO_TICKS(100));
 
-        testHardwareVibration();
+        // if(GRAPH_ARDUINO_PLOTTER){
+            //Envio log para graficar en arduino serial plotter
+            //printf("angle_x:%f,set_point: %f,output_pid: %f, output_motor:%d\n",newAngles[AXIS_ANGLE_Y],CENTER_ANGLE_MOUNTED,outputPid,outputMotors.motorL);
+        // }
+
+        // testHardwareVibration();
+
+        // printf(">angle:%f\n>outputMotor:%f\n",statusToSend.pitch/10.0,statusToSend.speedL/100.0);
+
+        printf("angle:%f,set_point: %f,kp: %f,ki: %f,kd: %f,output_motor:%d\n",statusToSend.pitch,statusToSend.setPoint,statusToSend.pid.kp,statusToSend.pid.ki,statusToSend.pid.kd,statusToSend.speedL);
     }
 }

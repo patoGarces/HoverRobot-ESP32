@@ -35,7 +35,15 @@
 typedef struct{
     int16_t motorR;
     int16_t motorL;
-}output_motors_t;
+} output_motors_t;
+
+typedef struct{
+    float kp;
+    float ki;
+    float kd;
+    float centerAngle;
+    float safetyLimits;
+} pid_params_t;
 
 enum{
     STATUS_ROBOT_INIT,
