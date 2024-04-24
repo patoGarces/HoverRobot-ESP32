@@ -34,8 +34,8 @@ void mpu6050Handler(void*){
 	// mpu.setYGyroOffset(76);
 	// mpu.setZGyroOffset(-85);
 	// mpu.setZAccelOffset(1788);
-    mpu6050_calibrateAccel(6);
-    mpu6050_calibrateGyro(6);
+    // mpu6050_calibrateAccel(6);
+    // mpu6050_calibrateGyro(6);
 
 	mpu6050_setDMPEnabled(true);
 

@@ -20,7 +20,7 @@
 
 #define GRAPH_ARDUINO_PLOTTER   false
 #define MAX_VELOCITY            1000.00
-#define VEL_MAX_CONTROL         5    
+#define VEL_MAX_CONTROL         200    
 #define DEVICE_BT_NAME          "Balancing robot"
 
 extern QueueSetHandle_t newAnglesQueue;                 // Recibo nuevos angulos obtenidos del MPU
@@ -36,6 +36,8 @@ output_motors_t attitudeControlMotor;
 static void imuControlHandler(void *pvParameters){
     float newAngles[3];
     output_motors_t outputMotors;
+    float safetyLimitProm[2];
+    uint8_t safetyLimitPromIndex = 0;
 
     outputMotorQueue = xQueueCreate(5,sizeof(output_motors_t));
 
@@ -51,33 +53,53 @@ static void imuControlHandler(void *pvParameters){
             uint16_t outputPidMotors = (uint16_t)(pidCalculate(statusToSend.pitch) * MAX_VELOCITY); 
 
             if(outputPidMotors > 50 || statusToSend.pitch < -50) {
-                outputMotors.motorL = outputPidMotors;
-                outputMotors.motorR = outputPidMotors;
+                outputMotors.motorL = outputPidMotors + attitudeControlMotor.motorL;
+                outputMotors.motorR = outputPidMotors + attitudeControlMotor.motorR;
             }
             else {
                 outputMotors.motorL = 0;
                 outputMotors.motorR = 0;
             }
 
+            if (outputMotors.motorL > 1000) {
+                outputMotors.motorL = 1000;
+            }
+            if (outputMotors.motorR > 1000) {
+                outputMotors.motorR = 1000;
+            }
+            if (outputMotors.motorL < -1000) {
+                outputMotors.motorL = -1000;
+            }
+            if (outputMotors.motorR < -1000) {
+                outputMotors.motorR = -1000;
+            }
             setVelMotors(outputMotors.motorL,outputMotors.motorR);
 
             statusToSend.speedL = outputMotors.motorL;
             statusToSend.speedR = outputMotors.motorR;
 
-            if (!pidGetEnable()) { 
+            safetyLimitProm[safetyLimitPromIndex++] = newAngles[AXIS_ANGLE_Y];
+            if (safetyLimitPromIndex>1) {
+                safetyLimitPromIndex = 0;
+            }
+            float angleSafetyLimit = (safetyLimitProm[0] + safetyLimitProm[1]) / 2;
+
+            if (pidGetEnable()) { 
+                if (((angleSafetyLimit < (CENTER_ANGLE_MOUNTED-statusToSend.pid.safetyLimits)) || (angleSafetyLimit > (CENTER_ANGLE_MOUNTED+statusToSend.pid.safetyLimits)))){ 
+                    setVelMotors(0,0);
+                    pidSetDisable();
+                    statusToSend.status_code = STATUS_ROBOT_DISABLE;
+                    
+                    printf("\n\nSAFETY LIMITS REACHED: angle: %f, safetyLimit: %f\n\n",newAngles[AXIS_ANGLE_Y],statusToSend.pid.safetyLimits); 
+                }
+            }
+            else { 
                 if (((newAngles[AXIS_ANGLE_Y] > (CENTER_ANGLE_MOUNTED-1)) && (newAngles[AXIS_ANGLE_Y] < (CENTER_ANGLE_MOUNTED+1)))) { 
                     pidSetEnable();   
                     statusToSend.status_code = STATUS_ROBOT_STABILIZED;                                                   
                 }
                 else {
                     pidSetDisable();
-                }
-            }
-            else { 
-                if (((newAngles[AXIS_ANGLE_Y] < (CENTER_ANGLE_MOUNTED-statusToSend.pid.safetyLimits)) || (newAngles[AXIS_ANGLE_Y] > (CENTER_ANGLE_MOUNTED+statusToSend.pid.safetyLimits)))){ 
-                    setVelMotors(0,0);
-                    pidSetDisable();
-                    statusToSend.status_code = STATUS_ROBOT_DISABLE; 
                 }
             }
             // gpio_set_level(PIN_OSCILO, 0);
@@ -122,14 +144,16 @@ static void attitudeControl(void *pvParameters){
             // attitudeControlMotor.motorR = newControlVal.axis_x *  VEL_MAX_CONTROL + newControlVal.axis_y * -1 * VEL_MAX_CONTROL;
             // setVelMotors(attitudeControlMotor.motorL,attitudeControlMotor.motorR);
 
-            float setPoint = (newControlVal.axis_y / 100.00) * 5.00; // Max 5 grados
+            attitudeControlMotor.motorL = (newControlVal.axis_x / 100.00) * -1 * VEL_MAX_CONTROL;
+            attitudeControlMotor.motorR = (newControlVal.axis_x / 100.00) *  VEL_MAX_CONTROL;
+
+            float setPoint = statusToSend.pid.centerAngle + (newControlVal.axis_y / 100.00) * 5.00; // Max 5 grados
 
             statusToSend.setPoint = setPoint;
             pidSetSetPoint(setPoint);
         } 
     }
 }
-
 
 void testHardwareVibration(){
     uint8_t flagInc=true;
@@ -177,15 +201,17 @@ void app_main() {
     btInit(DEVICE_BT_NAME);
 
     mpu6050_initialize();
+    vTaskDelay(pdMS_TO_TICKS(3000));
 
     readParams = storageReadPidParams();
     // TODO: Eliminar
-    readParams.kp = 10.0;
-    readParams.ki = 4;
-    readParams.kd = 0.5;
-    readParams.safetyLimits = 50;
+    readParams.kp = 3.3;
+    readParams.ki = 2;
+    readParams.kd = 0.2;
+    readParams.safetyLimits = 70;
     readParams.centerAngle = 0.0;
     statusToSend.pid = readParams;
+    statusToSend.setPoint = readParams.centerAngle;
     printf("Hardcode Params: center: %f kp: %f , ki: %f , kd: %f,safetyLimits: %f,centerAngle: %f\n",readParams.centerAngle,readParams.kp,readParams.ki,readParams.kd,readParams.safetyLimits,readParams.centerAngle);
     
     pid_init_t pidConfig = {

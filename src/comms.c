@@ -52,12 +52,15 @@ void communicationHandler(void * param){
                 memcpy(&newPidSettings,received_data,bytes_received);
 
                 if(newPidSettings.header == HEADER_COMMS && (newPidSettings.checksum == (newPidSettings.header ^ newPidSettings.header_key ^ newPidSettings.kp ^ newPidSettings.ki ^ newPidSettings.kd ^ newPidSettings.center_angle ^ newPidSettings.safety_limits))){   
-                    pidParams.safetyLimits = (float)newPidSettings.safety_limits;
-                    pidParams.centerAngle = (float)newPidSettings.center_angle;
-                    pidParams.kp = (float)newPidSettings.kp;
-                    pidParams.ki = (float)newPidSettings.ki;
-                    pidParams.kd = (float)newPidSettings.kd;
+                    pidParams.safetyLimits = newPidSettings.safety_limits / 10.00;
+                    pidParams.centerAngle = newPidSettings.center_angle / 10.00;
+                    pidParams.kp = newPidSettings.kp / 10.00;
+                    pidParams.ki = newPidSettings.ki / 10.00;
+                    pidParams.kd = newPidSettings.kd / 10.00;
                     xQueueSend(queueNewPidParams,(void*)&pidParams,0);
+                }
+                else{
+                    printf("ERROR CHECKSUM pidSettings\n");
                 }
             }
             else if( header == HEADER_COMMS && headerPackage == HEADER_RX_KEY_CONTROL && bytes_received == sizeof(newControlVal)){
