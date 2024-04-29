@@ -2,7 +2,7 @@
 #define __MAIN_H__
 #include "stdint.h"
 
-#define PERIOD_IMU_MS   20//2.5      
+#define PERIOD_IMU_MS   100//20//2.5      
 
 #define PIN_LED         2  //27 en mainBoard
 #define PIN_OSCILO      13
@@ -24,13 +24,10 @@
 #define GPIO_MOT_ENABLE     14
 #define GPIO_MOT_MICRO_STEP 12
 
-
 #define MPU_HANDLER_PRIORITY    configMAX_PRIORITIES - 1
 
 #define IMU_HANDLER_PRIORITY    configMAX_PRIORITIES - 2
 #define IMU_HANDLER_CORE        1
-
-#define CENTER_ANGLE_MOUNTED    0.00  
 
 typedef struct{
     int16_t motorR;
@@ -45,10 +42,12 @@ typedef struct{
     float safetyLimits;
 } pid_params_t;
 
-enum{
+
+// ATENCION: este enum esta emparejado con una enum class en la app, se deben modificar a la vez
+enum {
     STATUS_ROBOT_INIT,
     STATUS_ROBOT_DISABLE,
-    STATUS_ROBOT_ENABLE,
+    STATUS_ROBOT_ARMED,
     STATUS_ROBOT_STABILIZED,
     STATUS_ROBOT_ERROR
 };

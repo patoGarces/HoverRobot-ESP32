@@ -8,10 +8,7 @@
 #include "storage_flash.h"
 #include <string.h>
 
-
 #define COMMS_CORE  0
-
-// QueueHandle_t queueReceiveSettings;
 
 extern StreamBufferHandle_t xStreamBufferReceiver;
 extern StreamBufferHandle_t xStreamBufferSender;
@@ -52,11 +49,11 @@ void communicationHandler(void * param){
                 memcpy(&newPidSettings,received_data,bytes_received);
 
                 if(newPidSettings.header == HEADER_COMMS && (newPidSettings.checksum == (newPidSettings.header ^ newPidSettings.header_key ^ newPidSettings.kp ^ newPidSettings.ki ^ newPidSettings.kd ^ newPidSettings.center_angle ^ newPidSettings.safety_limits))){   
-                    pidParams.safetyLimits = newPidSettings.safety_limits / 10.00;
-                    pidParams.centerAngle = newPidSettings.center_angle / 10.00;
-                    pidParams.kp = newPidSettings.kp / 10.00;
-                    pidParams.ki = newPidSettings.ki / 10.00;
-                    pidParams.kd = newPidSettings.kd / 10.00;
+                    pidParams.safetyLimits = newPidSettings.safety_limits / 100.00;
+                    pidParams.centerAngle = newPidSettings.center_angle / 100.00;
+                    pidParams.kp = newPidSettings.kp / 100.00;
+                    pidParams.ki = newPidSettings.ki / 100.00;
+                    pidParams.kd = newPidSettings.kd / 100.00;
                     xQueueSend(queueNewPidParams,(void*)&pidParams,0);
                 }
                 else{
@@ -76,20 +73,36 @@ void communicationHandler(void * param){
 }
 
 void sendStatus(status_robot_t status){
-    // xQueueSend(queueSend,( void * ) &status, 0);
+
+    status.checksum =   status.header ^
+                        status.batVoltage ^
+                        status.batPercent ^
+                        status.batTemp ^
+                        status.tempImu ^
+                        status.tempEscs ^
+                        status.speedR ^
+                        status.speedL ^
+                        (uint16_t)status.pitch ^
+                        (uint16_t)status.roll ^
+                        (uint16_t)status.yaw ^
+                        (uint16_t)status.pid.kp ^
+                        (uint16_t)status.pid.ki ^
+                        (uint16_t)status.pid.kd ^
+                        (uint16_t)status.pid.safetyLimits ^
+                        (uint16_t)status.pid.centerAngle ^
+                        (uint16_t)status.setPoint ^
+                        status.ordenCode ^
+                        status.statusCode;
+
 
     if (xStreamBufferSend(xStreamBufferSender, &status, sizeof(status), 1) != pdPASS) {
         /* TODO: Manejar el caso en el que el buffer está lleno y no se pueden enviar datos */
     }
 
-    
     // char SendAngleChar[50];
-
     // // sprintf(SendAngleChar,">angle:%f\n>outputMotor:%f\n",status.actualAngle,status.speedL/100.0);
     // sprintf(SendAngleChar,">angle:%f\n",status.actualAngle);
-
-    // printf(SendAngleChar);
-           
+    // printf(SendAngleChar); 
     // if (xStreamBufferSend(xStreamBufferSender, &SendAngleChar, sizeof(SendAngleChar), 1) != pdPASS) {
     //     /* TODO: Manejar el caso en el que el buffer está lleno y no se pueden enviar datos */
     // }

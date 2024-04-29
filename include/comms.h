@@ -39,11 +39,11 @@
  */
 typedef struct{
     uint16_t header;
-    uint16_t bat_voltage;
-    uint16_t bat_percent;
+    uint16_t batVoltage;
+    uint16_t batPercent;
     uint16_t batTemp;
-    uint16_t temp_uc_control;
-    uint16_t temp_uc_main;
+    uint16_t tempImu;
+    uint16_t tempEscs;
     int16_t  speedR;
     int16_t  speedL;
     float    pitch;
@@ -51,8 +51,8 @@ typedef struct{
     float    yaw;
     pid_params_t pid;
     float    setPoint;
-    uint16_t orden_code;
-    uint16_t status_code;
+    uint16_t ordenCode;
+    uint16_t statusCode;
     uint16_t checksum;
 }status_robot_t;
 

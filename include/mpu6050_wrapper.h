@@ -20,6 +20,13 @@ typedef struct {
     float z;
 } vector_float_wrapper_t;
 
+typedef struct {
+    float yaw;
+    float pitch;
+    float roll;
+    float temp;
+} vector_queue_t;
+
 enum {
     AXIS_ANGLE_X,
     AXIS_ANGLE_Y,

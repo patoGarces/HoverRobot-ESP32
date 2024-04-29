@@ -16,17 +16,16 @@ static MPU6050 mpu;
 #define PIN_SDA        32
 #define PIN_CLK        33
 
-quaternion_wrapper_t q;             // [w, x, y, z]         quaternion container
-vector_float_wrapper_t gravity;     // [x, y, z]            gravity vector
-float ypr[3];                       // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
-uint16_t packetSize = 42;           // expected DMP packet size (default is 42 bytes)
-uint16_t fifoCount;                 // count of all bytes currently in FIFO
-uint8_t fifoBuffer[64];             // FIFO storage buffer
-uint8_t mpuIntStatus;               // holds actual interrupt status byte from MPU
-
 void mpu6050Handler(void*){
+	quaternion_wrapper_t q;             // [w, x, y, z]         quaternion container
+	vector_float_wrapper_t gravity;     // [x, y, z]            gravity vector
+	float ypr[3];                       // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
+	uint16_t packetSize = 42;           // expected DMP packet size (default is 42 bytes)
+	uint16_t fifoCount;                 // count of all bytes currently in FIFO
+	uint8_t fifoBuffer[64];             // FIFO storage buffer
+	uint8_t mpuIntStatus;               // holds actual interrupt status byte from MPU
 
-    newAnglesQueue = xQueueCreate(1,sizeof(ypr));
+    newAnglesQueue = xQueueCreate(1,sizeof(vector_queue_t));
 	mpu6050_dmpInitialize();    // retorna 0 si la inicializacion fue exitosa
 
 	// This need to be setup individually
@@ -58,15 +57,14 @@ void mpu6050Handler(void*){
             mpu6050_dmpGetGravity(&gravity,&q);
             mpu6050_dmpGetYawPitchRoll(ypr,&q,&gravity);
 
-			// printf("YAW: %3.1f, ", ypr[0] * 180/M_PI);
-			// printf("PITCH: %3.1f, ", ypr[1] * 180/M_PI);
-			// printf("ROLL: %3.1f \n", ypr[2] * 180/M_PI);
+			vector_queue_t newData = {
+				.yaw = ((ypr[0] * 180) / (float)M_PI),
+				.pitch = ((ypr[1] * 180) / (float)M_PI),
+				.roll = ((ypr[2] * 180) / (float)M_PI),
+				.temp = ((mpu.getTemperature() / 340.0f) + 36.53f)
+			};
 
-			for(uint8_t i=0;i<3;i++){
-				ypr[i] = ypr[i] * 180 / M_PI;
-			}
-
-            xQueueSend(newAnglesQueue,( void * ) &ypr, 1);
+            xQueueSend(newAnglesQueue,(void *) &newData, 1);
 	    }
 
 	    //Best result is to match with DMP refresh rate

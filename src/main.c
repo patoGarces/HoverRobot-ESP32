@@ -5,7 +5,6 @@
 #include "freertos/queue.h"
 #include "stdio.h"
 #include "math.h"
-
 #include "driver/i2c.h"
 
 #include "main.h"
@@ -21,6 +20,8 @@
 #define GRAPH_ARDUINO_PLOTTER   false
 #define MAX_VELOCITY            1000.00
 #define VEL_MAX_CONTROL         200    
+#define MAX_ANGLE_JOYSTICK      4.0
+
 #define DEVICE_BT_NAME          "Balancing robot"
 
 extern QueueSetHandle_t newAnglesQueue;                 // Recibo nuevos angulos obtenidos del MPU
@@ -29,37 +30,37 @@ QueueSetHandle_t outputMotorQueue;                      // Envio nuevos valores 
 
 QueueHandle_t queueReceiveControl;
 
-status_robot_t statusToSend;                            // Estructura que contiene todos los parametros de status a enviar a la app
+status_robot_t statusRobot;                            // Estructura que contiene todos los parametros de status a enviar a la app
 
 output_motors_t attitudeControlMotor;
 
 static void imuControlHandler(void *pvParameters){
-    float newAngles[3];
+    vector_queue_t newAngles;
     output_motors_t outputMotors;
     float safetyLimitProm[2];
     uint8_t safetyLimitPromIndex = 0;
 
     outputMotorQueue = xQueueCreate(5,sizeof(output_motors_t));
-
-    pidSetEnable();
+    statusRobot.statusCode = STATUS_ROBOT_ARMED;
 
     while(1){
         if(xQueueReceive(newAnglesQueue,&newAngles,pdMS_TO_TICKS(10))){
 
-            statusToSend.roll = newAngles[AXIS_ANGLE_X];
-            statusToSend.pitch = newAngles[AXIS_ANGLE_Y];
-            statusToSend.yaw = newAngles[AXIS_ANGLE_Z];
+            statusRobot.roll = newAngles.yaw;
+            statusRobot.pitch = newAngles.pitch;
+            statusRobot.yaw = newAngles.roll;
+            statusRobot.tempImu = (uint16_t)newAngles.temp * 10;
 
-            uint16_t outputPidMotors = (uint16_t)(pidCalculate(statusToSend.pitch) * MAX_VELOCITY); 
+            uint16_t outputPidMotors = (uint16_t)(pidCalculate(statusRobot.pitch) * MAX_VELOCITY); 
 
-            if(outputPidMotors > 50 || statusToSend.pitch < -50) {
+            // if(outputPidMotors > 5 || statusRobot.pitch < -5) {
                 outputMotors.motorL = outputPidMotors + attitudeControlMotor.motorL;
                 outputMotors.motorR = outputPidMotors + attitudeControlMotor.motorR;
-            }
-            else {
-                outputMotors.motorL = 0;
-                outputMotors.motorR = 0;
-            }
+            // }
+            // else {
+            //     outputMotors.motorL = 0;
+            //     outputMotors.motorR = 0;
+            // }
 
             if (outputMotors.motorL > 1000) {
                 outputMotors.motorL = 1000;
@@ -75,28 +76,26 @@ static void imuControlHandler(void *pvParameters){
             }
             setVelMotors(outputMotors.motorL,outputMotors.motorR);
 
-            statusToSend.speedL = outputMotors.motorL;
-            statusToSend.speedR = outputMotors.motorR;
+            statusRobot.speedL = outputMotors.motorL;
+            statusRobot.speedR = outputMotors.motorR;
 
-            safetyLimitProm[safetyLimitPromIndex++] = newAngles[AXIS_ANGLE_Y];
+            safetyLimitProm[safetyLimitPromIndex++] = statusRobot.pitch;
             if (safetyLimitPromIndex>1) {
                 safetyLimitPromIndex = 0;
             }
             float angleSafetyLimit = (safetyLimitProm[0] + safetyLimitProm[1]) / 2;
 
             if (pidGetEnable()) { 
-                if (((angleSafetyLimit < (CENTER_ANGLE_MOUNTED-statusToSend.pid.safetyLimits)) || (angleSafetyLimit > (CENTER_ANGLE_MOUNTED+statusToSend.pid.safetyLimits)))){ 
+                if (((angleSafetyLimit < (statusRobot.pid.centerAngle-statusRobot.pid.safetyLimits)) || (angleSafetyLimit > (statusRobot.pid.centerAngle+statusRobot.pid.safetyLimits)))){ 
                     setVelMotors(0,0);
                     pidSetDisable();
-                    statusToSend.status_code = STATUS_ROBOT_DISABLE;
-                    
-                    printf("\n\nSAFETY LIMITS REACHED: angle: %f, safetyLimit: %f\n\n",newAngles[AXIS_ANGLE_Y],statusToSend.pid.safetyLimits); 
+                    statusRobot.statusCode = STATUS_ROBOT_ARMED;
                 }
             }
             else { 
-                if (((newAngles[AXIS_ANGLE_Y] > (CENTER_ANGLE_MOUNTED-1)) && (newAngles[AXIS_ANGLE_Y] < (CENTER_ANGLE_MOUNTED+1)))) { 
+                if (((statusRobot.pitch > (statusRobot.pid.centerAngle-1)) && (statusRobot.pitch < (statusRobot.pid.centerAngle+1)))) { 
                     pidSetEnable();   
-                    statusToSend.status_code = STATUS_ROBOT_STABILIZED;                                                   
+                    statusRobot.statusCode = STATUS_ROBOT_STABILIZED;                                                   
                 }
                 else {
                     pidSetDisable();
@@ -116,12 +115,11 @@ static void updateParams(void *pvParameters){
     while (1){
         
         if(xQueueReceive(queueNewPidParams,&newPidParams,0)){
-            newPidParams.centerAngle += CENTER_ANGLE_MOUNTED;
             pidSetConstants(newPidParams.kp,newPidParams.ki,newPidParams.kd);
             pidSetSetPoint(newPidParams.centerAngle);
             storageWritePidParams(newPidParams);            
 
-            statusToSend.pid = newPidParams;
+            statusRobot.pid = newPidParams;
             printf("\nNuevos parametros:\n\tP: %f\n\tI: %f\n\tD: %f,\n\tcenter: %f\n\tsafety limits: %f\n\n",newPidParams.kp,newPidParams.ki,newPidParams.kd,newPidParams.centerAngle,newPidParams.safetyLimits);              
         }
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -147,9 +145,9 @@ static void attitudeControl(void *pvParameters){
             attitudeControlMotor.motorL = (newControlVal.axis_x / 100.00) * -1 * VEL_MAX_CONTROL;
             attitudeControlMotor.motorR = (newControlVal.axis_x / 100.00) *  VEL_MAX_CONTROL;
 
-            float setPoint = statusToSend.pid.centerAngle + (newControlVal.axis_y / 100.00) * 5.00; // Max 5 grados
+            float setPoint = statusRobot.pid.centerAngle + (newControlVal.axis_y / 100.00) * MAX_ANGLE_JOYSTICK; // Max 5 grados
 
-            statusToSend.setPoint = setPoint;
+            statusRobot.setPoint = setPoint;
             pidSetSetPoint(setPoint);
         } 
     }
@@ -161,7 +159,7 @@ void testHardwareVibration(){
 
     // vTaskDelay(pdMS_TO_TICKS(5000));
     while(true) {
-        printf(">angle:%f\n>outputMotor:%f\n",statusToSend.pitch/10.0,statusToSend.speedL/100.0);
+        printf(">angle:%f\n>outputMotor:%f\n",statusRobot.pitch/10.0,statusRobot.speedL/100.0);
 
         if(flagInc){
             testMotor++;
@@ -177,9 +175,9 @@ void testHardwareVibration(){
                 // break;
             }
         }
-        statusToSend.speedL = testMotor*10;
-        statusToSend.speedR = testMotor*10;
-        setVelMotors(statusToSend.speedL,statusToSend.speedR);
+        statusRobot.speedL = testMotor*10;
+        statusRobot.speedR = testMotor*10;
+        setVelMotors(statusRobot.speedL,statusRobot.speedR);
         vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
@@ -204,14 +202,8 @@ void app_main() {
     vTaskDelay(pdMS_TO_TICKS(3000));
 
     readParams = storageReadPidParams();
-    // TODO: Eliminar
-    readParams.kp = 3.3;
-    readParams.ki = 2;
-    readParams.kd = 0.2;
-    readParams.safetyLimits = 70;
-    readParams.centerAngle = 0.0;
-    statusToSend.pid = readParams;
-    statusToSend.setPoint = readParams.centerAngle;
+    statusRobot.pid = readParams;
+    statusRobot.setPoint = readParams.centerAngle;
     printf("Hardcode Params: center: %f kp: %f , ki: %f , kd: %f,safetyLimits: %f,centerAngle: %f\n",readParams.centerAngle,readParams.kp,readParams.ki,readParams.kd,readParams.safetyLimits,readParams.centerAngle);
     
     pid_init_t pidConfig = {
@@ -248,15 +240,14 @@ void app_main() {
             if(cont1>50){
                 cont1 =0;
             }
-            statusToSend.header = HEADER_COMMS;
-            statusToSend.bat_voltage = 10;
-            statusToSend.bat_percent = 55;
-            statusToSend.batTemp = 100-cont1;
-            statusToSend.temp_uc_control = cont1;
-            statusToSend.temp_uc_main = 123-cont1; 
-            // statusToSend.status_code = 0;
-
-            sendStatus(statusToSend);
+            statusRobot.header = HEADER_TX_KEY_STATUS;
+            statusRobot.batVoltage = 10;
+            statusRobot.batPercent = 55;
+            statusRobot.batTemp = cont1;
+            statusRobot.tempEscs = cont1;
+            // uint16_t ordenCode;
+            // uint16_t statusCode;
+            sendStatus(statusRobot);
         }
         // gpio_set_level(PIN_LED,1);
         vTaskDelay(pdMS_TO_TICKS(50));
@@ -269,9 +260,7 @@ void app_main() {
         // }
 
         // testHardwareVibration();
-
-        // printf(">angle:%f\n>outputMotor:%f\n",statusToSend.pitch/10.0,statusToSend.speedL/100.0);
-
-        printf("angle:%f,set_point: %f,kp: %f,ki: %f,kd: %f,output_motor:%d\n",statusToSend.pitch,statusToSend.setPoint,statusToSend.pid.kp,statusToSend.pid.ki,statusToSend.pid.kd,statusToSend.speedL);
+        // printf(">angle:%f\n>outputMotor:%f\n",statusRobot.pitch/10.0,statusRobot.speedL/100.0);
+        // printf("angle:%f,set_point: %f,kp: %f,ki: %f,kd: %f,output_motor:%d\n",statusRobot.pitch,statusRobot.setPoint,statusRobot.pid.kp,statusRobot.pid.ki,statusRobot.pid.kd,statusRobot.speedL);
     }
 }
