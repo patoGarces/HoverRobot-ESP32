@@ -16,6 +16,10 @@ static MPU6050 mpu;
 #define PIN_SDA        32
 #define PIN_CLK        33
 
+
+TaskHandle_t readHandler;
+uint8_t enableCalibrate = false;
+
 void mpu6050Handler(void*){
 	quaternion_wrapper_t q;             // [w, x, y, z]         quaternion container
 	vector_float_wrapper_t gravity;     // [x, y, z]            gravity vector
@@ -33,8 +37,11 @@ void mpu6050Handler(void*){
 	// mpu.setYGyroOffset(76);
 	// mpu.setZGyroOffset(-85);
 	// mpu.setZAccelOffset(1788);
-    // mpu6050_calibrateAccel(6);
-    // mpu6050_calibrateGyro(6);
+	if (enableCalibrate) {
+		mpu6050_calibrateAccel(6);
+		mpu6050_calibrateGyro(6);
+		enableCalibrate = false;
+	}
 
 	mpu6050_setDMPEnabled(true);
 
@@ -72,7 +79,6 @@ void mpu6050Handler(void*){
 	    // Now its 0x13, which means DMP is refreshed with 10Hz rate
 		// vTaskDelay(5/portTICK_PERIOD_MS);
 	}
-
 	vTaskDelete(NULL);
 }
 
@@ -89,7 +95,14 @@ void mpu6050_initialize() {
 	ESP_ERROR_CHECK(i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0));
     mpu.initialize();
 
-    xTaskCreate(mpu6050Handler,"mpu6050_handler_wrapper",4096,NULL,5,NULL);
+    xTaskCreate(mpu6050Handler,"mpu6050_handler_wrapper",4096,NULL,5,&readHandler);
+}
+
+void mpu6050_recalibrate() {
+	vTaskDelete(readHandler);
+	enableCalibrate = true;
+	i2c_driver_delete(I2C_NUM_0);
+	mpu6050_initialize();
 }
 
 int mpu6050_testConnection() {
@@ -110,6 +123,10 @@ void mpu6050_calibrateGyro(int loops) {
 
 void mpu6050_setDMPEnabled(bool enable) {
     mpu.setDMPEnabled(enable);
+}
+
+void mpu6050_DMPReset() {
+	mpu.resetDMP();
 }
 
 uint8_t mpu6050_getIntStatus() {

@@ -6,8 +6,28 @@
 
 #define HEADER_COMMS            0xABC0
 #define HEADER_TX_KEY_STATUS    0xAB01          // key a enviar que indica que el paquete enviado a la app es un status
-#define HEADER_RX_KEY_CONTROL   0xAB02          // key que indica qe el paquete recibido de la app es de control
-#define HEADER_RX_KEY_SETTINGS  0xAB03          // key que indica qe el paquete recibido de la app es de configuracion
+#define HEADER_RX_KEY_CONTROL   0xAB02          // key que indica que el paquete recibido de la app es de control
+#define HEADER_RX_KEY_SETTINGS  0xAB03          // key que indica que el paquete recibido de la app es de configuracion
+#define HEADER_TX_KEY_COMMAND   0xAB04          // key que indica que el paquete a enviar es un comando
+
+
+
+enum CommandsToRobot {
+    COMMAND_CALIBRATE_IMU,
+    COMMAND_ARMED_ROBOT,
+    COMMAND_DISARMED_ROBOT,
+    COMMAND_VIBRATION_TEST
+};
+
+// ATENCION: este enum esta emparejado con una enum class en la app, se deben modificar a la vez
+enum {
+    STATUS_ROBOT_INIT,
+    STATUS_ROBOT_DISABLE,
+    STATUS_ROBOT_ARMED,
+    STATUS_ROBOT_STABILIZED,
+    STATUS_ROBOT_ERROR
+};
+
 
 /**
  * @brief Estructura de datos de configuracion recibida de la app
@@ -33,6 +53,16 @@
     int32_t  axis_y;
     uint32_t checksum;
 } control_app_t;
+
+/**
+ * @brief Estructura de datos de comandos recibida de la app
+ */
+ typedef struct{
+    uint32_t header;
+    uint32_t header_key;
+    int32_t  command;
+    uint32_t checksum;
+} command_app_t;
 
 /**
  * @brief Esta estructura de datos es la que se envia a la app android

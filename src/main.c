@@ -19,22 +19,22 @@
 
 #define GRAPH_ARDUINO_PLOTTER   false
 #define MAX_VELOCITY            1000.00
-#define VEL_MAX_CONTROL         200    
+#define VEL_MAX_CONTROL         100    
 #define MAX_ANGLE_JOYSTICK      4.0
 
 #define DEVICE_BT_NAME          "Balancing robot"
 
 extern QueueSetHandle_t newAnglesQueue;                 // Recibo nuevos angulos obtenidos del MPU
+QueueSetHandle_t outputMotorQueue;                      // Envio nuevos valores de salida para el control de motores // TODO: sin usar
 QueueHandle_t queueNewPidParams;                        // Recibo nuevos parametros relacionados al pid
-QueueSetHandle_t outputMotorQueue;                      // Envio nuevos valores de salida para el control de motores
-
+QueueHandle_t queueNewCommand;
 QueueHandle_t queueReceiveControl;
 
 status_robot_t statusRobot;                            // Estructura que contiene todos los parametros de status a enviar a la app
 
 output_motors_t attitudeControlMotor;
 
-static void imuControlHandler(void *pvParameters){
+static void imuControlHandler(void *pvParameters) {
     vector_queue_t newAngles;
     output_motors_t outputMotors;
     float safetyLimitProm[2];
@@ -53,14 +53,14 @@ static void imuControlHandler(void *pvParameters){
 
             uint16_t outputPidMotors = (uint16_t)(pidCalculate(statusRobot.pitch) * MAX_VELOCITY); 
 
-            // if(outputPidMotors > 5 || statusRobot.pitch < -5) {
+            if(outputPidMotors >25 || statusRobot.pitch < -25) {
                 outputMotors.motorL = outputPidMotors + attitudeControlMotor.motorL;
                 outputMotors.motorR = outputPidMotors + attitudeControlMotor.motorR;
-            // }
-            // else {
-            //     outputMotors.motorL = 0;
-            //     outputMotors.motorR = 0;
-            // }
+            }
+            else {
+                outputMotors.motorL = 0;
+                outputMotors.motorR = 0;
+            }
 
             if (outputMotors.motorL > 1000) {
                 outputMotors.motorL = 1000;
@@ -87,6 +87,7 @@ static void imuControlHandler(void *pvParameters){
 
             if (pidGetEnable()) { 
                 if (((angleSafetyLimit < (statusRobot.pid.centerAngle-statusRobot.pid.safetyLimits)) || (angleSafetyLimit > (statusRobot.pid.centerAngle+statusRobot.pid.safetyLimits)))){ 
+                    disableMotors();
                     setVelMotors(0,0);
                     pidSetDisable();
                     statusRobot.statusCode = STATUS_ROBOT_ARMED;
@@ -95,10 +96,8 @@ static void imuControlHandler(void *pvParameters){
             else { 
                 if (((statusRobot.pitch > (statusRobot.pid.centerAngle-1)) && (statusRobot.pitch < (statusRobot.pid.centerAngle+1)))) { 
                     pidSetEnable();   
+                    enableMotors();
                     statusRobot.statusCode = STATUS_ROBOT_STABILIZED;                                                   
-                }
-                else {
-                    pidSetDisable();
                 }
             }
             // gpio_set_level(PIN_OSCILO, 0);
@@ -109,8 +108,10 @@ static void imuControlHandler(void *pvParameters){
 static void updateParams(void *pvParameters){
 
     pid_params_t newPidParams;
+    command_app_t newCommand;
 
     queueNewPidParams = xQueueCreate(1,sizeof(pid_params_t));
+    queueNewCommand = xQueueCreate(1, sizeof(command_app_t));
 
     while (1){
         
@@ -121,6 +122,16 @@ static void updateParams(void *pvParameters){
 
             statusRobot.pid = newPidParams;
             printf("\nNuevos parametros:\n\tP: %f\n\tI: %f\n\tD: %f,\n\tcenter: %f\n\tsafety limits: %f\n\n",newPidParams.kp,newPidParams.ki,newPidParams.kd,newPidParams.centerAngle,newPidParams.safetyLimits);              
+        }
+        if(xQueueReceive(queueNewCommand,&newCommand,0)){
+
+            switch (newCommand.command) {
+                case COMMAND_CALIBRATE_IMU:
+                
+                    printf("\nreseteado DMP, calibrando ->\n");
+                    mpu6050_recalibrate();
+                break;
+            }            
         }
         vTaskDelay(pdMS_TO_TICKS(100));
     }
@@ -228,7 +239,7 @@ void app_main() {
     enableMotors();
 
     xTaskCreatePinnedToCore(imuControlHandler,"Imu Control Task",4096,NULL,IMU_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);
-    xTaskCreate(updateParams,"Update Params Task",2048,NULL,3,NULL);
+    xTaskCreate(updateParams,"Update Params Task",4096,NULL,3,NULL);
     xTaskCreate(attitudeControl,"attitude control Task",2048,NULL,4,NULL);
 
     setVelMotors(0,0);

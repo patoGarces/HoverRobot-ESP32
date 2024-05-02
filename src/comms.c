@@ -1,4 +1,3 @@
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -15,6 +14,7 @@ extern StreamBufferHandle_t xStreamBufferSender;
 
 extern QueueHandle_t queueNewPidParams;
 extern QueueHandle_t queueReceiveControl;
+extern QueueHandle_t queueNewCommand;
 
 void communicationHandler(void * param);
 
@@ -35,40 +35,62 @@ void communicationHandler(void * param){
     pid_settings_t  newPidSettings;
     pid_params_t    pidParams;
     control_app_t   newControlVal;
+    command_app_t   newCommand;
     
     while(1) {
         BaseType_t bytes_received = xStreamBufferReceive(xStreamBufferReceiver, received_data, sizeof(received_data), 0);
 
-        if (bytes_received > 1){
-            // esp_log_buffer_hex("xStreamBufferReceive", &received_data, bytes_received);
+        if (bytes_received > 1) {
 
             uint32_t header = getUint32(0,received_data);
             uint32_t headerPackage = getUint32(4,received_data);
-            if( header == HEADER_COMMS && headerPackage == HEADER_RX_KEY_SETTINGS && bytes_received == sizeof(newPidSettings)){
+            if (header == HEADER_COMMS) {
+                switch(headerPackage) {
+                    case HEADER_RX_KEY_SETTINGS: 
+                        if (bytes_received == sizeof(newPidSettings)) {
+                            memcpy(&newPidSettings,received_data,bytes_received);
+                            if(newPidSettings.checksum == (newPidSettings.header ^ newPidSettings.header_key ^ newPidSettings.kp ^ newPidSettings.ki ^ newPidSettings.kd ^ newPidSettings.center_angle ^ newPidSettings.safety_limits)){   
+                                pidParams.safetyLimits = newPidSettings.safety_limits / 100.00;
+                                pidParams.centerAngle = newPidSettings.center_angle / 100.00;
+                                pidParams.kp = newPidSettings.kp / 100.00;
+                                pidParams.ki = newPidSettings.ki / 100.00;
+                                pidParams.kd = newPidSettings.kd / 100.00;
+                                xQueueSend(queueNewPidParams,(void*)&pidParams,0);
+                            }
+                            else{
+                                printf("ERROR CHECKSUM pidSettings\n");
+                            }
+                        }
+                    break;
 
-                memcpy(&newPidSettings,received_data,bytes_received);
+                    case HEADER_RX_KEY_CONTROL:
+                        if (bytes_received == sizeof(newControlVal)) {  
+                            memcpy(&newControlVal,received_data,bytes_received);
+                            if(newControlVal.checksum == (newControlVal.header ^ newControlVal.header_key ^ newControlVal.axis_x ^ newControlVal.axis_y)) {   
+                                xQueueSend(queueReceiveControl,(void*)&newControlVal,0);
+                            }
+                            else{
+                                printf("ERROR CHECKSUM newControlVal\n");
+                            }      
+                        }
+                    break;
 
-                if(newPidSettings.header == HEADER_COMMS && (newPidSettings.checksum == (newPidSettings.header ^ newPidSettings.header_key ^ newPidSettings.kp ^ newPidSettings.ki ^ newPidSettings.kd ^ newPidSettings.center_angle ^ newPidSettings.safety_limits))){   
-                    pidParams.safetyLimits = newPidSettings.safety_limits / 100.00;
-                    pidParams.centerAngle = newPidSettings.center_angle / 100.00;
-                    pidParams.kp = newPidSettings.kp / 100.00;
-                    pidParams.ki = newPidSettings.ki / 100.00;
-                    pidParams.kd = newPidSettings.kd / 100.00;
-                    xQueueSend(queueNewPidParams,(void*)&pidParams,0);
-                }
-                else{
-                    printf("ERROR CHECKSUM pidSettings\n");
+                    case HEADER_TX_KEY_COMMAND:
+                        if (bytes_received == sizeof(newCommand)) { 
+                            memcpy(&newCommand,received_data,bytes_received); 
+                            if(newCommand.checksum == (newCommand.header ^ newCommand.header_key ^ newCommand.command)) {   
+                                xQueueSend(queueNewCommand,(void*)&newCommand,0);
+                            }
+                            else{
+                                printf("ERROR CHECKSUM newCommand\n");
+                            }      
+                        }
+                    break;
                 }
             }
-            else if( header == HEADER_COMMS && headerPackage == HEADER_RX_KEY_CONTROL && bytes_received == sizeof(newControlVal)){
-                memcpy(&newControlVal,received_data,bytes_received);
-                xQueueSend(queueReceiveControl,(void*)&newControlVal,0);
-            }
-
         }
         vTaskDelay(pdMS_TO_TICKS(10));  
     }
-
     spp_wr_task_shut_down();
 }
 
@@ -95,8 +117,9 @@ void sendStatus(status_robot_t status){
                         status.statusCode;
 
 
-    if (xStreamBufferSend(xStreamBufferSender, &status, sizeof(status), 1) != pdPASS) {
+    if (xStreamBufferSend(xStreamBufferSender, &status, sizeof(status), 1) != sizeof(status)) {
         /* TODO: Manejar el caso en el que el buffer está lleno y no se pueden enviar datos */
+         ESP_LOGI("COMMS", "BUFFER DE TRANSMISION OVERFLOW");
     }
 
     // char SendAngleChar[50];

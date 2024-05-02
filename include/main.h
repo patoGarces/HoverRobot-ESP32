@@ -42,14 +42,4 @@ typedef struct{
     float safetyLimits;
 } pid_params_t;
 
-
-// ATENCION: este enum esta emparejado con una enum class en la app, se deben modificar a la vez
-enum {
-    STATUS_ROBOT_INIT,
-    STATUS_ROBOT_DISABLE,
-    STATUS_ROBOT_ARMED,
-    STATUS_ROBOT_STABILIZED,
-    STATUS_ROBOT_ERROR
-};
-
 #endif
