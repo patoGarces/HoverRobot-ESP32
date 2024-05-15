@@ -8,6 +8,13 @@ extern "C" {
 #include <stdint.h>
 
 typedef struct {
+    gpio_num_t sclGpio;
+    gpio_num_t sdaGpio;
+    gpio_num_t intGpio;
+    uint8_t priorityTask;
+} mpu6050_init_t;
+
+typedef struct {
     float w;
     float x;
     float y;
@@ -33,7 +40,7 @@ enum {
     AXIS_ANGLE_Z
 };
 
-void mpu6050_initialize();
+void mpu6050_initialize(mpu6050_init_t *config);
 int mpu6050_testConnection();
 void mpu6050_recalibrate();
 int mpu6050_dmpInitialize();

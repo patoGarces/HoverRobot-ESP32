@@ -16,7 +16,7 @@ extern QueueHandle_t queueNewPidParams;
 extern QueueHandle_t queueReceiveControl;
 extern QueueHandle_t queueNewCommand;
 
-void communicationHandler(void * param);
+static void communicationHandler(void * param);
 
 void spp_wr_task_start_up(void){
     xTaskCreatePinnedToCore(communicationHandler, "communicationHandler", 4096, NULL, 5, NULL,COMMS_CORE);

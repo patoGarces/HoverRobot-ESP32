@@ -2,15 +2,24 @@
 #define __MAIN_H__
 #include "stdint.h"
 
-#define PERIOD_IMU_MS   100//20//2.5      
 
-#define PIN_LED         2  //27 en mainBoard
-#define PIN_OSCILO      13
+// #define HARDWARE_PROTOTYPE
+#define HARDWARE_HOVERROBOT
 
-// Pinout CAN
-#define GPIO_CAN_TX     14
-#define GPIO_CAN_RX     12
-#define UART_PORT_CAN   UART_NUM_1
+#define PERIOD_IMU_MS   100
+#define MPU_HANDLER_PRIORITY    configMAX_PRIORITIES - 1
+#define IMU_HANDLER_PRIORITY    configMAX_PRIORITIES - 2
+#define IMU_HANDLER_CORE        1
+
+
+#if defined(HARDWARE_PROTOTYPE) && defined(HARDWARE_HOVERROBOT)
+#error Error hardware robot config
+#elif !defined(HARDWARE_PROTOTYPE) && !defined(HARDWARE_HOVERROBOT)
+#error Error hardware robot config
+
+#elif defined(HARDWARE_PROTOTYPE)
+#define PIN_LED             2
+#define PIN_OSCILO          13
 
 // Pinout MPU6050
 #define GPIO_MPU_INT        31      
@@ -24,14 +33,26 @@
 #define GPIO_MOT_ENABLE     14
 #define GPIO_MOT_MICRO_STEP 12
 
-#define MPU_HANDLER_PRIORITY    configMAX_PRIORITIES - 1
+#elif defined(HARDWARE_HOVERROBOT)
 
-#define IMU_HANDLER_PRIORITY    configMAX_PRIORITIES - 2
-#define IMU_HANDLER_CORE        1
+#define PIN_LED         27
+#define PIN_OSCILO      13
+
+// Pinout CAN
+#define GPIO_CAN_TX     26
+#define GPIO_CAN_RX     25
+#define UART_PORT_CAN   UART_NUM_2
+
+#define GPIO_MPU_INT     35
+#define GPIO_MPU_SDA     32
+#define GPIO_MPU_SCL     33
+
+#endif
 
 typedef struct{
     int16_t motorR;
     int16_t motorL;
+    uint8_t enable;
 } output_motors_t;
 
 typedef struct{

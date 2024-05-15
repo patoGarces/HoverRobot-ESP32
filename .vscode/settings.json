@@ -45,8 +45,9 @@
         "esp_task_wdt.h": "c",
         "ets_sys.h": "c",
         "mpu6050_wrapper.h": "c",
-        "temperature_sensor.h": "c"
+        "temperature_sensor.h": "c",
+        "can_mcb.h": "c"
     },
-    "idf.portWin": "COM13",
+    "idf.portWin": "COM9",
     "idf.adapterTargetName": "esp32"
 }

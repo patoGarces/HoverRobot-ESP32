@@ -13,18 +13,6 @@ typedef struct {
 } stepper_config_t;
 
 void motorsInit(stepper_config_t config);
-void enableMotors(void);
-void disableMotors(void);
-void setVelMotors(int16_t speedL,int16_t speedR);
 void setMicroSteps(uint8_t fullStep);
-
-
-
-
-
-
-
-
-
 
 #endif

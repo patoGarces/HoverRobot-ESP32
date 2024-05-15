@@ -13,11 +13,8 @@ extern "C" {
 QueueSetHandle_t newAnglesQueue;   // Envio angulos
 static MPU6050 mpu;
 
-#define PIN_SDA        32
-#define PIN_CLK        33
-
-
 TaskHandle_t readHandler;
+mpu6050_init_t MpuConfigInit;
 uint8_t enableCalibrate = false;
 
 void mpu6050Handler(void*){
@@ -37,15 +34,15 @@ void mpu6050Handler(void*){
 	// mpu.setYGyroOffset(76);
 	// mpu.setZGyroOffset(-85);
 	// mpu.setZAccelOffset(1788);
-	if (enableCalibrate) {
-		mpu6050_calibrateAccel(6);
-		mpu6050_calibrateGyro(6);
-		enableCalibrate = false;
-	}
+	// if (enableCalibrate) {			// TODO: descomentar
+	// 	mpu6050_calibrateAccel(6);
+	// 	mpu6050_calibrateGyro(6);
+	// 	enableCalibrate = false;
+	// }
 
 	mpu6050_setDMPEnabled(true);
 
-	while(1){
+	while(1) {
 	    mpuIntStatus = mpu6050_getIntStatus();
 		// get current FIFO count
 		fifoCount = mpu6050_getFIFOCount();
@@ -71,7 +68,10 @@ void mpu6050Handler(void*){
 				.temp = ((mpu.getTemperature() / 340.0f) + 36.53f)
 			};
 
+			printf("roll: %f\n",newData.roll);
             xQueueSend(newAnglesQueue,(void *) &newData, 1);
+
+			vTaskDelay(pdMS_TO_TICKS(5));
 	    }
 
 	    //Best result is to match with DMP refresh rate
@@ -82,12 +82,14 @@ void mpu6050Handler(void*){
 	vTaskDelete(NULL);
 }
 
-void mpu6050_initialize() {
+void mpu6050_initialize(mpu6050_init_t *config) {
     
+	MpuConfigInit = *config;
+
     i2c_config_t conf;
 	conf.mode = I2C_MODE_MASTER;
-	conf.sda_io_num = (gpio_num_t)PIN_SDA;
-	conf.scl_io_num = (gpio_num_t)PIN_CLK;
+	conf.sda_io_num = config->sdaGpio;
+	conf.scl_io_num = config->sclGpio;
 	conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
 	conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
 	conf.master.clk_speed = 400000;
@@ -95,14 +97,14 @@ void mpu6050_initialize() {
 	ESP_ERROR_CHECK(i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0));
     mpu.initialize();
 
-    xTaskCreate(mpu6050Handler,"mpu6050_handler_wrapper",4096,NULL,5,&readHandler);
+    xTaskCreate(mpu6050Handler,"mpu6050_handler_wrapper",4096,NULL,config->priorityTask,&readHandler);
 }
 
 void mpu6050_recalibrate() {
 	vTaskDelete(readHandler);
 	enableCalibrate = true;
 	i2c_driver_delete(I2C_NUM_0);
-	mpu6050_initialize();
+	mpu6050_initialize(&MpuConfigInit);
 }
 
 int mpu6050_testConnection() {
