@@ -34,11 +34,11 @@ void mpu6050Handler(void*){
 	// mpu.setYGyroOffset(76);
 	// mpu.setZGyroOffset(-85);
 	// mpu.setZAccelOffset(1788);
-	// if (enableCalibrate) {			// TODO: descomentar
-	// 	mpu6050_calibrateAccel(6);
-	// 	mpu6050_calibrateGyro(6);
-	// 	enableCalibrate = false;
-	// }
+	if (enableCalibrate) {
+		mpu6050_calibrateAccel(6);
+		mpu6050_calibrateGyro(6);
+		enableCalibrate = false;
+	}
 
 	mpu6050_setDMPEnabled(true);
 
@@ -68,10 +68,10 @@ void mpu6050Handler(void*){
 				.temp = ((mpu.getTemperature() / 340.0f) + 36.53f)
 			};
 
-			printf("roll: %f\n",newData.roll);
+			// printf("roll: %f\n",newData.roll);
             xQueueSend(newAnglesQueue,(void *) &newData, 1);
 
-			vTaskDelay(pdMS_TO_TICKS(5));
+			vTaskDelay(pdMS_TO_TICKS(50));
 	    }
 
 	    //Best result is to match with DMP refresh rate

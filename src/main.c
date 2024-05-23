@@ -52,7 +52,6 @@ static void imuControlHandler(void *pvParameters) {
     float safetyLimitProm[2];
     uint8_t safetyLimitPromIndex = 0;
 
-    // queueMotorControl = xQueueCreate(1,sizeof(output_motors_t));
     statusRobot.statusCode = STATUS_ROBOT_ARMED;
 
     while(1){
@@ -65,7 +64,8 @@ static void imuControlHandler(void *pvParameters) {
 
             uint16_t outputPidMotors = (uint16_t)(pidCalculate(statusRobot.pitch) * MAX_VELOCITY); 
 
-            if(outputPidMotors >25 || statusRobot.pitch < -25) {
+            uint16_t deadBand = 3;
+            if(outputPidMotors > deadBand || statusRobot.pitch < -deadBand) {
                 speedMotors.motorL = outputPidMotors + attitudeControlMotor.motorL;
                 speedMotors.motorR = outputPidMotors + attitudeControlMotor.motorR;
             }
@@ -214,8 +214,8 @@ void testHardwareVibration(void) {
 
         statusRobot.speedL = testMotor*10;
         statusRobot.speedR = testMotor*10;
-        speedMotors.motorL = testMotor*5;
-        speedMotors.motorR = testMotor*5;
+        speedMotors.motorL = testMotor*3;
+        speedMotors.motorR = testMotor*3;
         xQueueSend(queueMotorControl,&speedMotors,pdMS_TO_TICKS(1));
         vTaskDelay(pdMS_TO_TICKS(50));
     }
@@ -245,6 +245,9 @@ void app_main() {
     vTaskDelay(pdMS_TO_TICKS(5000));
 
     readParams = storageReadPidParams();
+    // readParams.kd = 0;
+    // readParams.ki = 0;
+    // readParams.kp = 0.5;
     statusRobot.pid = readParams;
     statusRobot.setPoint = readParams.centerAngle;
     printf("Hardcode Params: center: %f kp: %f , ki: %f , kd: %f,safetyLimits: %f,centerAngle: %f\n",readParams.centerAngle,readParams.kp,readParams.ki,readParams.kd,readParams.safetyLimits,readParams.centerAngle);
@@ -267,25 +270,22 @@ void app_main() {
         mcbInit(&configMcb);
     #endif
 
-    xTaskCreatePinnedToCore(imuControlHandler,"Imu Control Task",4096,NULL,IMU_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);
-    xTaskCreate(attitudeControl,"attitude control Task",2048,NULL,4,NULL);
-    xTaskCreate(commsManager,"communication manager",4096,NULL,3,NULL);
-
     #ifdef HARDWARE_PROTOTYPE
-    stepper_config_t configMotors = {
-        .gpio_mot_l_step = GPIO_MOT_L_STEP,
-        .gpio_mot_l_dir = GPIO_MOT_L_DIR,
-        .gpio_mot_r_step = GPIO_MOT_R_STEP,
-        .gpio_mot_r_dir = GPIO_MOT_R_DIR,
-        .gpio_mot_enable = GPIO_MOT_ENABLE,
-        .gpio_mot_microstepper = GPIO_MOT_MICRO_STEP
-    };
-    motorsInit(configMotors);
-    setMicroSteps(true);
+        stepper_config_t configMotors = {
+            .gpio_mot_l_step = GPIO_MOT_L_STEP,
+            .gpio_mot_l_dir = GPIO_MOT_L_DIR,
+            .gpio_mot_r_step = GPIO_MOT_R_STEP,
+            .gpio_mot_r_dir = GPIO_MOT_R_DIR,
+            .gpio_mot_enable = GPIO_MOT_ENABLE,
+            .gpio_mot_microstepper = GPIO_MOT_MICRO_STEP
+        };
+        motorsInit(configMotors);
+        setMicroSteps(true);
     #endif
 
-    // queueMotorControl = xQueueCreate(1,sizeof(output_motors_t));// TODO: eliminar
-
+    xTaskCreatePinnedToCore(imuControlHandler,"Imu Control Task",4096,NULL,IMU_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);
+    xTaskCreate(attitudeControl,"attitude control Task",2048,NULL,4,NULL);
+    xTaskCreate(commsManager,"communication manager",4096,NULL,COMM_HANDLER_PRIORITY,NULL);
 
     while(1) {
         gpio_set_level(PIN_LED,1);

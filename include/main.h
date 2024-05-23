@@ -3,13 +3,15 @@
 #include "stdint.h"
 
 
-// #define HARDWARE_PROTOTYPE
-#define HARDWARE_HOVERROBOT
+#define HARDWARE_PROTOTYPE
+// #define HARDWARE_HOVERROBOT
 
 #define PERIOD_IMU_MS   100
 #define MPU_HANDLER_PRIORITY    configMAX_PRIORITIES - 1
 #define IMU_HANDLER_PRIORITY    configMAX_PRIORITIES - 2
 #define IMU_HANDLER_CORE        1
+
+#define COMM_HANDLER_PRIORITY   configMAX_PRIORITIES - 4
 
 
 #if defined(HARDWARE_PROTOTYPE) && defined(HARDWARE_HOVERROBOT)

@@ -111,6 +111,7 @@ void motorsInit(stepper_config_t config) {
 
     setEnableMotors(false);
     setVelMotors(0,0);
+    queueMotorControl = xQueueCreate(1,sizeof(output_motors_t));
     xTaskCreate(controlHandler,"motor control handler task",4096,NULL,5,NULL);
 }
 
@@ -124,7 +125,7 @@ static void setEnableMotors(uint8_t enable) {
         ledc_timer_pause(SPEED_MODE_TIMER,TIMER_MOT_L);
         ledc_timer_pause(SPEED_MODE_TIMER,TIMER_MOT_R);
     }
-    printf("enable motors: %d\n",enable);
+    // printf("enable motors: %d\n",enable);
 }
 
 void setVelMotors(int16_t speedL,int16_t speedR) {
