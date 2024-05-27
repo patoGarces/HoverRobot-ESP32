@@ -5,25 +5,22 @@
 #include "freertos/queue.h"
 #include "stdio.h"
 #include "math.h"
-#include "driver/i2c.h"
 
 #include "main.h"
 #include "comms.h"
 #include "PID.h"
 #include "storage_flash.h"
 #include "stepper.h"
-
 #include "mpu6050_wrapper.h"
 /* Incluyo componentes */
 #include "../components/BT_CLASSIC/include/BT_CLASSIC.h"
 #include "../components/CAN_COMMS/include/CAN_MCB.h"
+#include "../components/SERVO_CONTROL/include/SERVO_CONTROL.h"
 
 #define GRAPH_ARDUINO_PLOTTER   false
 #define MAX_VELOCITY            1000.00
 #define VEL_MAX_CONTROL         100    
-#define MAX_ANGLE_JOYSTICK      4.0
-
-#define DEVICE_BT_NAME          "Balancing robot"
+#define MAX_ANGLE_JOYSTICK      8.0
 
 extern QueueSetHandle_t newAnglesQueue;                 // Recibo nuevos angulos obtenidos del MPU
 QueueSetHandle_t queueMotorControl;                     // Envio nuevos valores de salida para el control de motores
@@ -54,9 +51,9 @@ static void imuControlHandler(void *pvParameters) {
 
     statusRobot.statusCode = STATUS_ROBOT_ARMED;
 
-    while(1){
+    while(1) {
         if(xQueueReceive(newAnglesQueue,&newAngles,pdMS_TO_TICKS(10))) {
-            // printf("Yaw: %f\n",newAngles.yaw);
+            // printf("pitch: %f\n",newAngles.pitch);
             statusRobot.roll = newAngles.roll;
             statusRobot.pitch = newAngles.pitch;
             statusRobot.yaw = newAngles.yaw;
@@ -90,6 +87,7 @@ static void imuControlHandler(void *pvParameters) {
                     speedMotors.motorL = 0;
                     speedMotors.motorR = 0;
                     statusRobot.statusCode = STATUS_ROBOT_ARMED;
+                    printf("SAFETYLIMITS: %f\n",statusRobot.pid.centerAngle);
                 }
             }
             else { 
@@ -99,12 +97,21 @@ static void imuControlHandler(void *pvParameters) {
                     statusRobot.statusCode = STATUS_ROBOT_STABILIZED;                                                   
                 }
             }
-
-            xQueueSend(queueMotorControl,&speedMotors,pdMS_TO_TICKS(1));
+            
+            #if !defined(HARDWARE_PROTOTYPE)
+                uint8_t velMotorToServoR = (speedMotors.motorR/20) + 50;
+                uint8_t velMotorToServoL = (speedMotors.motorL/20) + 50;
+                pwmSetOutput(2,velMotorToServoL);
+                pwmSetOutput(3,velMotorToServoR);
+                // printf("PWM OUTPUTS: L: %d R: %d\n",velMotorToServoR,velMotorToServoL);
+            #else
+                xQueueSend(queueMotorControl,&speedMotors,pdMS_TO_TICKS(1));
+            #endif
             statusRobot.speedL = speedMotors.motorL;
             statusRobot.speedR = speedMotors.motorR;
             // gpio_set_level(PIN_OSCILO, 0);
         }
+    
     }
 }
 
@@ -113,8 +120,10 @@ static void attitudeControl(void *pvParameters){
     queueReceiveControl = xQueueCreate(1, sizeof(control_app_t));
 
     control_app_t newControlVal;
+    output_motors_t newVel; // TODO: para prueba PWM
+    uint8_t contpwm = 0;
 
-    while(true){
+    while(true) {
         if( xQueueReceive(queueReceiveControl,
                          &newControlVal,
                          ( TickType_t ) 1 ) == pdPASS ){
@@ -132,6 +141,20 @@ static void attitudeControl(void *pvParameters){
             statusRobot.setPoint = setPoint;
             pidSetSetPoint(setPoint);
         } 
+
+        // if (xQueueReceive(queueMotorControl,&newVel,pdMS_TO_TICKS(1))) {
+
+
+        //     // contpwm++;
+        //     // if (contpwm> 99) { 
+        //         // contpwm = 60;
+        //     // }
+        //     uint8_t velMotorToServoR = (newVel.motorR/20) + 50;
+        //     uint8_t velMotorToServoL = (newVel.motorL/20) + 50;
+        //     pwmSetOutput(2,velMotorToServoL);
+        //     pwmSetOutput(3,velMotorToServoR);
+        // }
+        vTaskDelay(50);
     }
 }
 
@@ -164,7 +187,7 @@ static void commsManager(void *pvParameters){
                 break;
             }            
         }
-        if (btIsConnected()) {
+        if (isBtConnected()) {
             cont1++;
             if(cont1>50){
                 cont1 =0;
@@ -234,6 +257,7 @@ void app_main() {
     storageInit();
 
     btInit(DEVICE_BT_NAME);
+    vTaskDelay(1000);
 
     mpu6050_init_t configMpu = {
         .intGpio = GPIO_MPU_INT,
@@ -262,12 +286,23 @@ void app_main() {
     pidInit(pidConfig);
 
     #ifdef HARDWARE_HOVERROBOT
-        config_init_mcb_t configMcb = {
-            .numUart = UART_PORT_CAN,
-            .txPin = GPIO_CAN_TX,
-            .rxPin = GPIO_CAN_RX
+        // config_init_mcb_t configMcb = {
+        //     .numUart = UART_PORT_CAN,
+        //     .txPin = GPIO_CAN_TX,
+        //     .rxPin = GPIO_CAN_RX
+        // };
+        // mcbInit(&configMcb);
+        pwm_servo_init_t configServos = {
+            .hsPwm1Gpio = -1,
+            .hsPwm2Gpio = -1,
+            .lsPwm1Gpio = GPIO_PWM_R,
+            .lsPwm2Gpio = GPIO_PWM_L,
+            .lsPwm3Gpio = -1,
+            .lsPwm4Gpio = -1,
         };
-        mcbInit(&configMcb);
+        pwmServoInit(configServos);
+
+        // queueMotorControl = xQueueCreate(1,sizeof(output_motors_t));
     #endif
 
     #ifdef HARDWARE_PROTOTYPE

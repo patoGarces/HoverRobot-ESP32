@@ -3,8 +3,8 @@
 #include "stdint.h"
 
 
-#define HARDWARE_PROTOTYPE
-// #define HARDWARE_HOVERROBOT
+// #define HARDWARE_PROTOTYPE
+#define HARDWARE_HOVERROBOT
 
 #define PERIOD_IMU_MS   100
 #define MPU_HANDLER_PRIORITY    configMAX_PRIORITIES - 1
@@ -20,6 +20,7 @@
 #error Error hardware robot config
 
 #elif defined(HARDWARE_PROTOTYPE)
+#define DEVICE_BT_NAME          "Balancing robot prototype"
 #define PIN_LED             2
 #define PIN_OSCILO          13
 
@@ -37,6 +38,7 @@
 
 #elif defined(HARDWARE_HOVERROBOT)
 
+#define DEVICE_BT_NAME          "Balancing robot"
 #define PIN_LED         27
 #define PIN_OSCILO      13
 
@@ -44,6 +46,10 @@
 #define GPIO_CAN_TX     26
 #define GPIO_CAN_RX     25
 #define UART_PORT_CAN   UART_NUM_2
+
+// Pinout PWM (provisorio)
+#define GPIO_PWM_R      12
+#define GPIO_PWM_L      14
 
 #define GPIO_MPU_INT     35
 #define GPIO_MPU_SDA     32

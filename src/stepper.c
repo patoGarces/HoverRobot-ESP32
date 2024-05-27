@@ -10,7 +10,7 @@
 #include "../include/main.h"
 
 // NEMA 17 1/32
-#define FREQ_MIN  1500
+#define FREQ_MIN  500//1500
 #define FREQ_MAX  30000     // <--- VEL MAX
 
 // // impresora 1/32

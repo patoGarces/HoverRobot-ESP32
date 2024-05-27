@@ -44,8 +44,7 @@ void mpu6050Handler(void*){
 
 	while(1) {
 	    mpuIntStatus = mpu6050_getIntStatus();
-		// get current FIFO count
-		fifoCount = mpu6050_getFIFOCount();
+		fifoCount = mpu6050_getFIFOCount();// get current FIFO count
 
 	    if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
 	        // reset so we can continue cleanly
@@ -68,16 +67,15 @@ void mpu6050Handler(void*){
 				.temp = ((mpu.getTemperature() / 340.0f) + 36.53f)
 			};
 
-			// printf("roll: %f\n",newData.roll);
+			// printf("pitch: %f\n",newData.pitch);
             xQueueSend(newAnglesQueue,(void *) &newData, 1);
-
-			vTaskDelay(pdMS_TO_TICKS(50));
 	    }
 
 	    //Best result is to match with DMP refresh rate
 	    // Its last value in components/MPU6050/MPU6050_6Axis_MotionApps20.h file line 310
 	    // Now its 0x13, which means DMP is refreshed with 10Hz rate
 		// vTaskDelay(5/portTICK_PERIOD_MS);
+		// vTaskDelay(pdMS_TO_TICKS(50));
 	}
 	vTaskDelete(NULL);
 }
@@ -93,6 +91,7 @@ void mpu6050_initialize(mpu6050_init_t *config) {
 	conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
 	conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
 	conf.master.clk_speed = 400000;
+	conf.clk_flags = I2C_SCLK_SRC_FLAG_FOR_NOMAL;
 	ESP_ERROR_CHECK(i2c_param_config(I2C_NUM_0, &conf));
 	ESP_ERROR_CHECK(i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0));
     mpu.initialize();

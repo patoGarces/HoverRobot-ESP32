@@ -48,7 +48,8 @@
         "temperature_sensor.h": "c",
         "can_mcb.h": "c",
         "string.h": "c",
-        "esp_bit_defs.h": "c"
+        "esp_bit_defs.h": "c",
+        "servo_control.h": "c"
     },
     "idf.portWin": "COM9",
     "idf.adapterTargetName": "esp32"

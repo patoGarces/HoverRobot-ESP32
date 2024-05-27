@@ -23,6 +23,8 @@ void pidSetEnable(void) {
 
 void pidSetDisable(void) {
     pidControl1.enablePID = false;
+    pidControl1.iTerm = 0.00;
+    pidControl1.lastInput = 0.00;
 }
 
 bool pidGetEnable(void) {
