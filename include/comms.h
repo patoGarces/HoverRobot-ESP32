@@ -4,13 +4,13 @@
 #include "stdio.h"
 #include "main.h"
 
+#define TIMEOUT_COMMS           15              // Timeout maximo sin recibir communicacion de la app, en ms /10, ej: 15 = 150ms
+
 #define HEADER_COMMS            0xABC0
 #define HEADER_TX_KEY_STATUS    0xAB01          // key a enviar que indica que el paquete enviado a la app es un status
 #define HEADER_RX_KEY_CONTROL   0xAB02          // key que indica que el paquete recibido de la app es de control
 #define HEADER_RX_KEY_SETTINGS  0xAB03          // key que indica que el paquete recibido de la app es de configuracion
 #define HEADER_TX_KEY_COMMAND   0xAB04          // key que indica que el paquete a enviar es un comando
-
-
 
 enum CommandsToRobot {
     COMMAND_CALIBRATE_IMU,
@@ -32,7 +32,7 @@ enum {
 /**
  * @brief Estructura de datos de configuracion recibida de la app
  */
- typedef struct{
+ typedef struct {
     uint32_t header;
     uint32_t header_key;
     uint32_t kp;
@@ -46,7 +46,7 @@ enum {
 /**
  * @brief Estructura de datos de control recibida de la app
  */
- typedef struct{
+ typedef struct {
     uint32_t header;
     uint32_t header_key;
     int32_t  axis_x;
@@ -57,7 +57,7 @@ enum {
 /**
  * @brief Estructura de datos de comandos recibida de la app
  */
- typedef struct{
+ typedef struct {
     uint32_t header;
     uint32_t header_key;
     int32_t  command;
@@ -67,7 +67,7 @@ enum {
 /**
  * @brief Esta estructura de datos es la que se envia a la app android
  */
-typedef struct{
+typedef struct {
     uint16_t header;
     uint16_t batVoltage;
     uint16_t batPercent;
@@ -87,5 +87,6 @@ typedef struct{
 }status_robot_t;
 
 void spp_wr_task_start_up(void);
+void spp_wr_task_shut_down(void);
 void sendStatus(status_robot_t status);
 #endif
