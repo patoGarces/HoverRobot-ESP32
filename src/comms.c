@@ -16,13 +16,15 @@ extern QueueHandle_t queueNewPidParams;
 extern QueueHandle_t queueReceiveControl;
 extern QueueHandle_t queueNewCommand;
 
+TaskHandle_t commsHandle;
+
 static void communicationHandler(void * param);
 
 void spp_wr_task_start_up(void){
-    xTaskCreatePinnedToCore(communicationHandler, "communicationHandler", 4096, NULL, 5, NULL,COMMS_CORE);
+    xTaskCreatePinnedToCore(communicationHandler, "communicationHandler", 4096, NULL, 5, &commsHandle,COMMS_CORE);
 }
 void spp_wr_task_shut_down(void){
-    vTaskDelete(NULL);
+    vTaskDelete(commsHandle);
 }
 
 uint32_t getUint32( uint32_t index, char* payload){
@@ -31,7 +33,7 @@ uint32_t getUint32( uint32_t index, char* payload){
 
 void communicationHandler(void * param){
     char received_data[100];
-
+    uint16_t contTimeout = 0;
     pid_settings_t  newPidSettings;
     pid_params_t    pidParams;
     control_app_t   newControlVal;
@@ -67,6 +69,7 @@ void communicationHandler(void * param){
                         if (bytes_received == sizeof(newControlVal)) {  
                             memcpy(&newControlVal,received_data,bytes_received);
                             if(newControlVal.checksum == (newControlVal.header ^ newControlVal.header_key ^ newControlVal.axis_x ^ newControlVal.axis_y)) {   
+                                contTimeout = 0;
                                 xQueueSend(queueReceiveControl,(void*)&newControlVal,0);
                             }
                             else{
@@ -86,12 +89,21 @@ void communicationHandler(void * param){
                             }      
                         }
                     break;
+                    default:
+                        printf("\n\nComando no reconocido\n\n"); 
+                    break;
                 }
             }
         }
         vTaskDelay(pdMS_TO_TICKS(10));  
+        contTimeout++;
+        if (contTimeout > TIMEOUT_COMMS) {
+            newControlVal.axis_x = 0;
+            newControlVal.axis_y = 0;
+            xQueueSend(queueReceiveControl,(void*)&newControlVal,0);
+        }
     }
-    spp_wr_task_shut_down();
+    vTaskDelete(NULL);
 }
 
 void sendStatus(status_robot_t status){
