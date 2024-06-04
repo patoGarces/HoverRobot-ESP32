@@ -46,7 +46,7 @@ int16_t cutSpeedRange(int16_t speed) {
 
 static void imuControlHandler(void *pvParameters) {
     vector_queue_t newAngles;
-    float safetyLimitProm[2];
+    float safetyLimitProm[5];
     uint8_t safetyLimitPromIndex = 0;
 
     statusRobot.statusCode = STATUS_ROBOT_ARMED;
@@ -75,10 +75,10 @@ static void imuControlHandler(void *pvParameters) {
             speedMotors.motorR = cutSpeedRange(speedMotors.motorR);
 
             safetyLimitProm[safetyLimitPromIndex++] = statusRobot.pitch;
-            if (safetyLimitPromIndex>1) {
+            if (safetyLimitPromIndex>2) {
                 safetyLimitPromIndex = 0;
             }
-            float angleSafetyLimit = (safetyLimitProm[0] + safetyLimitProm[1]) / 2;
+            float angleSafetyLimit = (safetyLimitProm[0] + safetyLimitProm[1] + safetyLimitProm[2]) / 3;
 
             if (pidGetEnable()) { 
                 if (((angleSafetyLimit < (statusRobot.pid.centerAngle-statusRobot.pid.safetyLimits)) || (angleSafetyLimit > (statusRobot.pid.centerAngle+statusRobot.pid.safetyLimits)))) { 
@@ -210,7 +210,7 @@ static void commsManager(void *pvParameters){
         // printf(">angle:%f\n>outputMotor:%f\n",statusRobot.pitch/10.0,statusRobot.speedL/100.0);
         // printf("angle:%f,set_point: %f,kp: %f,ki: %f,kd: %f,output_motor:%d\n",statusRobot.pitch,statusRobot.setPoint,statusRobot.pid.kp,statusRobot.pid.ki,statusRobot.pid.kd,statusRobot.speedL);
    
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
