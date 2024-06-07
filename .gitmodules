@@ -1,6 +1,3 @@
-[submodule "components/BT_CLASSIC"]
-	path = components/BT_CLASSIC
-	url = https://github.com/patoGarces/BT_CLASSIC_Components_ESP32
 [submodule "components/CAN_COMMS"]
 	path = components/CAN_COMMS
 	url = https://github.com/patoGarces/CAN_COMMS_Components_ESP32

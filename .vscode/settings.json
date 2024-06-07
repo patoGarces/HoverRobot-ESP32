@@ -49,7 +49,8 @@
         "can_mcb.h": "c",
         "string.h": "c",
         "esp_bit_defs.h": "c",
-        "servo_control.h": "c"
+        "servo_control.h": "c",
+        "bt_ble.h": "c"
     },
     "idf.portWin": "COM9",
     "idf.adapterTargetName": "esp32"

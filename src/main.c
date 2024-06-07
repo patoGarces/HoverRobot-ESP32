@@ -13,7 +13,7 @@
 #include "stepper.h"
 #include "mpu6050_wrapper.h"
 /* Incluyo componentes */
-#include "../components/BT_CLASSIC/include/BT_CLASSIC.h"
+#include "../components/BT_BLE/include/BT_BLE.h"
 #include "../components/CAN_COMMS/include/CAN_MCB.h"
 #include "../components/SERVO_CONTROL/include/SERVO_CONTROL.h"
 
