@@ -16,6 +16,8 @@
 #include "esp_bt_main.h"
 #include "include/BT_BLE.h"
 
+#include "../../../include/comms.h"
+
 #define GATTS_TABLE_TAG  "GATTS_SPP_DEMO"
 
 #define SPP_PROFILE_NUM             1
@@ -445,8 +447,15 @@ void spp_cmd_task(void * arg)
     for(;;){
         vTaskDelay(50 / portTICK_PERIOD_MS);
         if(xQueueReceive(cmd_cmd_queue, &cmd_id, portMAX_DELAY)) {
-            esp_log_buffer_char(GATTS_TABLE_TAG,(char *)(cmd_id),strlen((char *)cmd_id));
-            esp_log_buffer_hex(GATTS_TABLE_TAG,(char *)(cmd_id),strlen((char *)cmd_id));
+
+            // printf("\nbytes recibidos QUEUE: ");
+            //         for (size_t i = 0; i < sizeof(cmd_id); i++) {
+            //             printf("%02x ", cmd_id[i]);
+            //         }
+            //         printf("\n");
+
+            // esp_log_buffer_char(GATTS_TABLE_TAG,(char *)(cmd_id),strlen((char *)cmd_id));
+            // esp_log_buffer_hex(GATTS_TABLE_TAG,(char *)(cmd_id),strlen((char *)cmd_id));
             free(cmd_id);
         }
     }
@@ -462,7 +471,7 @@ static void spp_task_init(void)
     xTaskCreate(spp_heartbeat_task, "spp_heartbeat_task", 2048, NULL, 10, NULL);
 #endif
 
-    cmd_cmd_queue = xQueueCreate(10, 10);//sizeof(uint32_t));               // TODO: ajustar tamaño
+    cmd_cmd_queue = xQueueCreate(10, spp_mtu_size-3);//sizeof(uint32_t));               // TODO: ajustar tamaño
     xTaskCreate(spp_cmd_task, "spp_cmd_task", 2048, NULL, 10, NULL);
 }
 
@@ -514,7 +523,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
     	case ESP_GATTS_WRITE_EVT: {
     	    res = find_char_and_desr_index(p_data->write.handle);
             if(p_data->write.is_prep == false){
-                ESP_LOGI(GATTS_TABLE_TAG, "ESP_GATTS_WRITE_EVT : handle = %d\n", res);
+                // ESP_LOGI(GATTS_TABLE_TAG, "ESP_GATTS_WRITE_EVT : handle = %d\n", res);
                 if(res == SPP_IDX_SPP_COMMAND_VAL){
                     uint8_t * spp_cmd_buff = NULL;
                     spp_cmd_buff = (uint8_t *)malloc((spp_mtu_size - 3) * sizeof(uint8_t));
@@ -524,6 +533,17 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
                     }
                     memset(spp_cmd_buff,0x0,(spp_mtu_size - 3));
                     memcpy(spp_cmd_buff,p_data->write.value,p_data->write.len);
+
+                    printf("\nbytes recibidos: ");
+                    for (size_t i = 0; i < p_data->write.len; i++) {
+                        printf("%02x ", spp_cmd_buff[i]);
+                    }
+                    printf("\n");
+
+                    xStreamBufferSend(xStreamBufferReceiver,spp_cmd_buff,p_data->write.len,1);
+                    printf("\nStreamBuffer enviado: %d\n",p_data->write.len);
+
+
                     xQueueSend(cmd_cmd_queue,&spp_cmd_buff,10/portTICK_PERIOD_MS);
                 }else if(res == SPP_IDX_SPP_DATA_NTF_CFG){
                     if((p_data->write.len == 2)&&(p_data->write.value[0] == 0x01)&&(p_data->write.value[1] == 0x00)){
@@ -570,6 +590,11 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
     	}
     	case ESP_GATTS_MTU_EVT:
     	    spp_mtu_size = p_data->mtu.mtu;
+
+
+            printf("\nMPU NEGOCIADO: %d\n",spp_mtu_size);
+
+
     	    break;
     	case ESP_GATTS_CONF_EVT:
     	    break;
@@ -586,7 +611,9 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
     	    spp_gatts_if = gatts_if;
     	    is_connected = true;
     	    memcpy(&spp_remote_bda,&p_data->connect.remote_bda,sizeof(esp_bd_addr_t));
+            spp_wr_task_start_up();
             xTaskCreate(handlerEnqueueSender,"queue sender manager",4096,NULL,5,&SenderToBtHandle);
+            
 #ifdef SUPPORT_HEARTBEAT
     	    uint16_t cmd = 0;
             xQueueSend(cmd_heartbeat_queue,&cmd,10/portTICK_PERIOD_MS);
@@ -595,6 +622,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
     	case ESP_GATTS_DISCONNECT_EVT:
     	    is_connected = false;
     	    enable_data_ntf = false;
+            spp_wr_task_shut_down();
 #ifdef SUPPORT_HEARTBEAT
     	    enable_heart_ntf = false;
     	    heartbeat_count_num = 0;

@@ -33,25 +33,25 @@ enum {
  * @brief Estructura de datos de configuracion recibida de la app
  */
  typedef struct {
-    uint32_t header;
-    uint32_t header_key;
-    uint32_t kp;
-    uint32_t ki;
-    uint32_t kd;
-    int32_t  center_angle;
-    uint32_t safety_limits;
-    uint32_t checksum;
+    uint16_t header;
+    uint16_t header_key;
+    uint16_t kp;
+    uint16_t ki;
+    uint16_t kd;
+    int16_t  center_angle;
+    uint16_t safety_limits;
+    uint16_t checksum;
 } pid_settings_t;
 
 /**
  * @brief Estructura de datos de control recibida de la app
  */
  typedef struct {
-    uint32_t header;
-    uint32_t header_key;
-    int32_t  axis_x;
-    int32_t  axis_y;
-    uint32_t checksum;
+    uint16_t header;
+    uint16_t header_key;
+    int16_t  axis_x;
+    int16_t  axis_y;
+    uint16_t checksum;
 } control_app_t;
 
 /**

@@ -117,7 +117,7 @@ static void imuControlHandler(void *pvParameters) {
 
 static void attitudeControl(void *pvParameters){
 
-    queueReceiveControl = xQueueCreate(1, sizeof(control_app_t));
+    // queueReceiveControl = xQueueCreate(1, sizeof(control_app_t));
 
     control_app_t newControlVal;
     output_motors_t newVel; // TODO: para prueba PWM
@@ -126,7 +126,7 @@ static void attitudeControl(void *pvParameters){
     while(true) {
         if( xQueueReceive(queueReceiveControl,
                          &newControlVal,
-                         ( TickType_t ) 1 ) == pdPASS ){
+                         ( TickType_t ) 1 ) == pdPASS) {
 
             // Prueba directa control de motores:
             // attitudeControlMotor.motorL = newControlVal.axis_x * -1 * VEL_MAX_CONTROL + newControlVal.axis_y * -1 * VEL_MAX_CONTROL;

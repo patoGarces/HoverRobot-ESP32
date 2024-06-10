@@ -31,6 +31,10 @@ uint32_t getUint32( uint32_t index, char* payload){
     return (((uint32_t)payload[index+3]) << 24) + (((uint32_t)payload[index+2]) << 16) + (((uint32_t)payload[index+1]) << 8) + payload[index];
 }
 
+uint32_t getUint16( uint16_t index, char* payload){
+    return (((uint32_t)payload[index+1]) << 8) + payload[index];
+}
+
 void communicationHandler(void * param){
     char received_data[100];
     uint16_t contTimeout = 0;
@@ -38,14 +42,21 @@ void communicationHandler(void * param){
     pid_params_t    pidParams;
     control_app_t   newControlVal;
     command_app_t   newCommand;
+
+    queueReceiveControl = xQueueCreate(1, sizeof(control_app_t));
     
     while(1) {
         BaseType_t bytes_received = xStreamBufferReceive(xStreamBufferReceiver, received_data, sizeof(received_data), 0);
 
         if (bytes_received > 1) {
 
-            uint32_t header = getUint32(0,received_data);
-            uint32_t headerPackage = getUint32(4,received_data);
+            printf("\nStreamBufferRecibido size: %d\n",bytes_received);
+             esp_log_buffer_hex("COMMS_HANDLER",(uint8_t *)(received_data),bytes_received);
+
+            uint16_t header = getUint16(0,received_data);
+            uint16_t headerPackage = getUint16(2,received_data);
+
+            printf("header: %x, headerPackage: %x\n",header,headerPackage);
             if (header == HEADER_COMMS) {
                 switch(headerPackage) {
                     case HEADER_RX_KEY_SETTINGS: 
@@ -57,6 +68,8 @@ void communicationHandler(void * param){
                                 pidParams.kp = newPidSettings.kp / 100.00;
                                 pidParams.ki = newPidSettings.ki / 100.00;
                                 pidParams.kd = newPidSettings.kd / 100.00;
+
+                                printf("\n######## Nuevo PID RECIBIDO RAAAY #######\n");
                                 xQueueSend(queueNewPidParams,(void*)&pidParams,0);
                             }
                             else{
@@ -75,6 +88,9 @@ void communicationHandler(void * param){
                             else{
                                 printf("ERROR CHECKSUM newControlVal\n");
                             }      
+                        }
+                        else {
+                            printf("\n***** SIZEOFF NO COINCIDE: %d , %d*****\n",bytes_received,sizeof(newControlVal));
                         }
                     break;
 
