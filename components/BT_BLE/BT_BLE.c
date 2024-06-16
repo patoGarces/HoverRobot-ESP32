@@ -26,7 +26,7 @@
 #define SAMPLE_DEVICE_NAME          "ESP_SPP_SERVER 2"    //The Device Name Characteristics in GAP
 #define SPP_SVC_INST_ID	            0
 
-#define STREAM_BUFFER_SIZE              512
+#define STREAM_BUFFER_SIZE              100//512
 #define STREAM_BUFFER_LENGTH_TRIGGER    3
 
 /// SPP Service
@@ -42,7 +42,6 @@ static const uint16_t spp_service_uuid = 0xABF0;
 #endif
 
 static void handlerEnqueueSender(void *pvParameters);
-TaskHandle_t SenderToBtHandle;
 
 StreamBufferHandle_t xStreamBufferReceiver;
 StreamBufferHandle_t xStreamBufferSender;
@@ -60,7 +59,6 @@ static uint16_t spp_mtu_size = 23;
 static uint16_t spp_conn_id = 0xffff;
 static esp_gatt_if_t spp_gatts_if = 0xff;
 QueueHandle_t spp_uart_queue = NULL;
-static xQueueHandle cmd_cmd_queue = NULL;
 
 #ifdef SUPPORT_HEARTBEAT
 static xQueueHandle cmd_heartbeat_queue = NULL;
@@ -314,6 +312,38 @@ static void print_write_buffer(void)
     }
 }
 
+void sendStatusToRobot(robot_dynamic_data_t newFrame) {
+
+    newFrame.checksum = newFrame.header ^
+                        newFrame.speedR ^
+                        newFrame.speedL ^
+                        newFrame.pitch ^
+                        newFrame.roll ^
+                        newFrame.yaw ^
+                        newFrame.setPoint ^
+                        newFrame.centerAngle ^
+                        newFrame.statusCode;
+
+    // Asignar memoria para los datos a enviar
+    uint8_t *temp = (uint8_t *)malloc(sizeof(newFrame));
+    if (temp == NULL) {
+        ESP_LOGE(GATTS_TABLE_TAG, "%s malloc.1 failed\n", __func__);
+    } else {
+        // Copiar los datos de la estructura a la memoria asignada
+        memcpy(temp, &newFrame, sizeof(newFrame));
+
+        // Verificar el tamaño del paquete antes de enviar
+        if (sizeof(newFrame) <= (spp_mtu_size - 3)) {
+            esp_ble_gatts_send_indicate(spp_gatts_if, spp_conn_id, spp_handle_table[SPP_IDX_SPP_DATA_NTY_VAL], sizeof(newFrame), temp, false);
+        } else {
+            printf("ERROR TAMAÑO PAQUETE: %d\n", sizeof(newFrame));
+        }
+
+        // Liberar la memoria después de usarla
+        free(temp);
+    }
+}
+
 void uart_task(void *pvParameters)
 {
     uart_event_t event;
@@ -327,8 +357,8 @@ void uart_task(void *pvParameters)
             //Event of UART receving data
             case UART_DATA:
                 if ((event.size)&&(is_connected)) {
-                    uint8_t * temp = NULL;
-                    uint8_t * ntf_value_p = NULL;
+                    // uint8_t * temp = NULL;
+                    // uint8_t * ntf_value_p = NULL;
 #ifdef SUPPORT_HEARTBEAT
                     if(!enable_heart_ntf){
                         ESP_LOGE(GATTS_TABLE_TAG, "%s do not enable heartbeat Notify\n", __func__);
@@ -339,50 +369,57 @@ void uart_task(void *pvParameters)
                         ESP_LOGE(GATTS_TABLE_TAG, "%s do not enable data Notify\n", __func__);
                         break;
                     }
-                    temp = (uint8_t *)malloc(sizeof(uint8_t)*event.size);
-                    if(temp == NULL){
-                        ESP_LOGE(GATTS_TABLE_TAG, "%s malloc.1 failed\n", __func__);
-                        break;
-                    }
-                    memset(temp,0x0,event.size);
-                    uart_read_bytes(UART_NUM_0,temp,event.size,portMAX_DELAY);
-                    if(event.size <= (spp_mtu_size - 3)){
-                        esp_ble_gatts_send_indicate(spp_gatts_if, spp_conn_id, spp_handle_table[SPP_IDX_SPP_DATA_NTY_VAL],event.size, temp, false);
-                    }else if(event.size > (spp_mtu_size - 3)){
-                        if((event.size%(spp_mtu_size - 7)) == 0){
-                            total_num = event.size/(spp_mtu_size - 7);
-                        }else{
-                            total_num = event.size/(spp_mtu_size - 7) + 1;
-                        }
-                        current_num = 1;
-                        ntf_value_p = (uint8_t *)malloc((spp_mtu_size-3)*sizeof(uint8_t));
-                        if(ntf_value_p == NULL){
-                            ESP_LOGE(GATTS_TABLE_TAG, "%s malloc.2 failed\n", __func__);
-                            free(temp);
-                            break;
-                        }
-                        while(current_num <= total_num){
-                            if(current_num < total_num){
-                                ntf_value_p[0] = '#';
-                                ntf_value_p[1] = '#';
-                                ntf_value_p[2] = total_num;
-                                ntf_value_p[3] = current_num;
-                                memcpy(ntf_value_p + 4,temp + (current_num - 1)*(spp_mtu_size-7),(spp_mtu_size-7));
-                                esp_ble_gatts_send_indicate(spp_gatts_if, spp_conn_id, spp_handle_table[SPP_IDX_SPP_DATA_NTY_VAL],(spp_mtu_size-3), ntf_value_p, false);
-                            }else if(current_num == total_num){
-                                ntf_value_p[0] = '#';
-                                ntf_value_p[1] = '#';
-                                ntf_value_p[2] = total_num;
-                                ntf_value_p[3] = current_num;
-                                memcpy(ntf_value_p + 4,temp + (current_num - 1)*(spp_mtu_size-7),(event.size - (current_num - 1)*(spp_mtu_size - 7)));
-                                esp_ble_gatts_send_indicate(spp_gatts_if, spp_conn_id, spp_handle_table[SPP_IDX_SPP_DATA_NTY_VAL],(event.size - (current_num - 1)*(spp_mtu_size - 7) + 4), ntf_value_p, false);
-                            }
-                            vTaskDelay(20 / portTICK_PERIOD_MS);
-                            current_num++;
-                        }
-                        free(ntf_value_p);
-                    }
-                    free(temp);
+
+                    robot_dynamic_data_t newFrame = {
+                        .header = HEADER_TX_KEY_STATUS,
+                        .speedR = 2,
+                        .speedL = 3,
+                        .pitch = 4,
+                        .roll = 5,
+                        .yaw = 6,
+                        .setPoint = 7,
+                        .centerAngle = 8,
+                        .statusCode = 9
+                    };
+
+                    sendStatusToRobot(newFrame);
+                    // if(event.size <= (spp_mtu_size - 3)){
+                    //     esp_ble_gatts_send_indicate(spp_gatts_if, spp_conn_id, spp_handle_table[SPP_IDX_SPP_DATA_NTY_VAL],event.size, temp, false);
+                    // }else if(event.size > (spp_mtu_size - 3)){
+                    //     if((event.size%(spp_mtu_size - 7)) == 0){
+                    //         total_num = event.size/(spp_mtu_size - 7);
+                    //     }else{
+                    //         total_num = event.size/(spp_mtu_size - 7) + 1;
+                    //     }
+                    //     current_num = 1;
+                    //     ntf_value_p = (uint8_t *)malloc((spp_mtu_size-3)*sizeof(uint8_t));
+                    //     if(ntf_value_p == NULL){
+                    //         ESP_LOGE(GATTS_TABLE_TAG, "%s malloc.2 failed\n", __func__);
+                    //         free(temp);
+                    //         break;
+                    //     }
+                    //     while(current_num <= total_num){
+                    //         if(current_num < total_num){
+                    //             ntf_value_p[0] = '#';
+                    //             ntf_value_p[1] = '#';
+                    //             ntf_value_p[2] = total_num;
+                    //             ntf_value_p[3] = current_num;
+                    //             memcpy(ntf_value_p + 4,temp + (current_num - 1)*(spp_mtu_size-7),(spp_mtu_size-7));
+                    //             esp_ble_gatts_send_indicate(spp_gatts_if, spp_conn_id, spp_handle_table[SPP_IDX_SPP_DATA_NTY_VAL],(spp_mtu_size-3), ntf_value_p, false);
+                    //         }else if(current_num == total_num){
+                    //             ntf_value_p[0] = '#';
+                    //             ntf_value_p[1] = '#';
+                    //             ntf_value_p[2] = total_num;
+                    //             ntf_value_p[3] = current_num;
+                    //             memcpy(ntf_value_p + 4,temp + (current_num - 1)*(spp_mtu_size-7),(event.size - (current_num - 1)*(spp_mtu_size - 7)));
+                    //             esp_ble_gatts_send_indicate(spp_gatts_if, spp_conn_id, spp_handle_table[SPP_IDX_SPP_DATA_NTY_VAL],(event.size - (current_num - 1)*(spp_mtu_size - 7) + 4), ntf_value_p, false);
+                    //         }
+                    //         vTaskDelay(20 / portTICK_PERIOD_MS);
+                    //         current_num++;
+                    //     }
+                    //     free(ntf_value_p);
+                    // }
+                    // free(temp);
                 }
                 break;
             default:
@@ -440,28 +477,6 @@ void spp_heartbeat_task(void * arg)
 }
 #endif
 
-void spp_cmd_task(void * arg)
-{
-    uint8_t * cmd_id;
-
-    for(;;){
-        vTaskDelay(50 / portTICK_PERIOD_MS);
-        if(xQueueReceive(cmd_cmd_queue, &cmd_id, portMAX_DELAY)) {
-
-            // printf("\nbytes recibidos QUEUE: ");
-            //         for (size_t i = 0; i < sizeof(cmd_id); i++) {
-            //             printf("%02x ", cmd_id[i]);
-            //         }
-            //         printf("\n");
-
-            // esp_log_buffer_char(GATTS_TABLE_TAG,(char *)(cmd_id),strlen((char *)cmd_id));
-            // esp_log_buffer_hex(GATTS_TABLE_TAG,(char *)(cmd_id),strlen((char *)cmd_id));
-            free(cmd_id);
-        }
-    }
-    vTaskDelete(NULL);
-}
-
 static void spp_task_init(void)
 {
     spp_uart_init();
@@ -470,9 +485,6 @@ static void spp_task_init(void)
     cmd_heartbeat_queue = xQueueCreate(10, sizeof(uint32_t));
     xTaskCreate(spp_heartbeat_task, "spp_heartbeat_task", 2048, NULL, 10, NULL);
 #endif
-
-    cmd_cmd_queue = xQueueCreate(10, spp_mtu_size-3);//sizeof(uint32_t));               // TODO: ajustar tamaño
-    xTaskCreate(spp_cmd_task, "spp_cmd_task", 2048, NULL, 10, NULL);
 }
 
 static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
@@ -502,7 +514,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
     esp_ble_gatts_cb_param_t *p_data = (esp_ble_gatts_cb_param_t *) param;
     uint8_t res = 0xff;
 
-    ESP_LOGI(GATTS_TABLE_TAG, "event = %x\n",event);
+    // ESP_LOGI(GATTS_TABLE_TAG, "event = %x\n",event);
     switch (event) {
     	case ESP_GATTS_REG_EVT:
     	    ESP_LOGI(GATTS_TABLE_TAG, "%s %d\n", __func__, __LINE__);
@@ -525,27 +537,10 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
             if(p_data->write.is_prep == false){
                 // ESP_LOGI(GATTS_TABLE_TAG, "ESP_GATTS_WRITE_EVT : handle = %d\n", res);
                 if(res == SPP_IDX_SPP_COMMAND_VAL){
-                    uint8_t * spp_cmd_buff = NULL;
-                    spp_cmd_buff = (uint8_t *)malloc((spp_mtu_size - 3) * sizeof(uint8_t));
-                    if(spp_cmd_buff == NULL){
-                        ESP_LOGE(GATTS_TABLE_TAG, "%s malloc failed\n", __func__);
-                        break;
-                    }
-                    memset(spp_cmd_buff,0x0,(spp_mtu_size - 3));
-                    memcpy(spp_cmd_buff,p_data->write.value,p_data->write.len);
-
-                    printf("\nbytes recibidos: ");
-                    for (size_t i = 0; i < p_data->write.len; i++) {
-                        printf("%02x ", spp_cmd_buff[i]);
-                    }
-                    printf("\n");
-
-                    xStreamBufferSend(xStreamBufferReceiver,spp_cmd_buff,p_data->write.len,1);
-                    printf("\nStreamBuffer enviado: %d\n",p_data->write.len);
-
-
-                    xQueueSend(cmd_cmd_queue,&spp_cmd_buff,10/portTICK_PERIOD_MS);
-                }else if(res == SPP_IDX_SPP_DATA_NTF_CFG){
+                    // esp_log_buffer_hex(GATTS_TABLE_TAG,(uint8_t *)(p_data->write.value),p_data->write.len);
+                    xStreamBufferSend(xStreamBufferReceiver,p_data->write.value,p_data->write.len,1);
+                }
+                else if(res == SPP_IDX_SPP_DATA_NTF_CFG) {
                     if((p_data->write.len == 2)&&(p_data->write.value[0] == 0x01)&&(p_data->write.value[1] == 0x00)){
                         enable_data_ntf = true;
                     }else if((p_data->write.len == 2)&&(p_data->write.value[0] == 0x00)&&(p_data->write.value[1] == 0x00)){
@@ -590,11 +585,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
     	}
     	case ESP_GATTS_MTU_EVT:
     	    spp_mtu_size = p_data->mtu.mtu;
-
-
-            printf("\nMPU NEGOCIADO: %d\n",spp_mtu_size);
-
-
+            printf("\nMTU NEGOCIADO: %d\n",spp_mtu_size);
     	    break;
     	case ESP_GATTS_CONF_EVT:
     	    break;
@@ -612,7 +603,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
     	    is_connected = true;
     	    memcpy(&spp_remote_bda,&p_data->connect.remote_bda,sizeof(esp_bd_addr_t));
             spp_wr_task_start_up();
-            xTaskCreate(handlerEnqueueSender,"queue sender manager",4096,NULL,5,&SenderToBtHandle);
+            xTaskCreate(handlerEnqueueSender,"queue sender manager",10000,NULL,10,NULL);
             
 #ifdef SUPPORT_HEARTBEAT
     	    uint16_t cmd = 0;
@@ -658,10 +649,9 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
     }
 }
 
-
 static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param)
 {
-    ESP_LOGI(GATTS_TABLE_TAG, "EVT %d, gatts if %d\n", event, gatts_if);
+    // ESP_LOGI(GATTS_TABLE_TAG, "EVT %d, gatts if %d\n", event, gatts_if);
 
     /* If event is register event, store the gatts_if for each profile */
     if (event == ESP_GATTS_REG_EVT) {
@@ -688,21 +678,22 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
 
 static void handlerEnqueueSender(void *pvParameters){
 
-    char received_data[100];
+    uint8_t received_data[100];
     
-    while(is_connected){
+    while(is_connected) {
 
-        BaseType_t bytes_received = xStreamBufferReceive(xStreamBufferSender, received_data, sizeof(received_data) - 1, pdMS_TO_TICKS(50));
+        BaseType_t bytes_received = xStreamBufferReceive(xStreamBufferSender, (uint8_t *)received_data, sizeof(received_data) - 1, pdMS_TO_TICKS(50));
 
         if (bytes_received > 0 && isBtConnected()) {
 
-            // if (!waitCongestionTx) {
-            //     esp_spp_write(handleSpp,bytes_received,(uint8_t *)&received_data);
-            // }
-            // else {
-            //     printf("esperando a esp_spp_write\n");
-            // }
+            // Verificar el tamaño del paquete antes de enviar
+            if (bytes_received <= (spp_mtu_size - 3)) {
+                esp_ble_gatts_send_indicate(spp_gatts_if, spp_conn_id, spp_handle_table[SPP_IDX_SPP_DATA_NTY_VAL], bytes_received, received_data, false);
+            } else {
+                printf("ERROR TAMAÑO PAQUETE: %d\n", bytes_received);
+            }
         }
+        vTaskDelay(50);
     }
     vTaskDelete(NULL);
 }
@@ -751,9 +742,9 @@ void btInit(char* deviceName) {
 
     spp_task_init();
 
-    printf("Bluetooth iniciado exitosamente\n");
     xStreamBufferSender = xStreamBufferCreate( STREAM_BUFFER_SIZE, STREAM_BUFFER_LENGTH_TRIGGER );
     xStreamBufferReceiver = xStreamBufferCreate( STREAM_BUFFER_SIZE, STREAM_BUFFER_LENGTH_TRIGGER );
+    printf("Bluetooth iniciado exitosamente\n");
 }
 
 uint8_t isBtConnected(void){

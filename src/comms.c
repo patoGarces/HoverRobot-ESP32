@@ -43,26 +43,25 @@ void communicationHandler(void * param){
     control_app_t   newControlVal;
     command_app_t   newCommand;
 
-    queueReceiveControl = xQueueCreate(1, sizeof(control_app_t));
+    // queueReceiveControl = xQueueCreate(1, sizeof(control_app_t));
     
-    while(1) {
+    while(true) {
         BaseType_t bytes_received = xStreamBufferReceive(xStreamBufferReceiver, received_data, sizeof(received_data), 0);
 
         if (bytes_received > 1) {
-
-            printf("\nStreamBufferRecibido size: %d\n",bytes_received);
-             esp_log_buffer_hex("COMMS_HANDLER",(uint8_t *)(received_data),bytes_received);
+            // esp_log_buffer_hex("COMMS_HANDLER",(uint8_t *)(received_data),bytes_received);
 
             uint16_t header = getUint16(0,received_data);
             uint16_t headerPackage = getUint16(2,received_data);
 
-            printf("header: %x, headerPackage: %x\n",header,headerPackage);
+            // printf("header: %x, headerPackage: %x\n",header,headerPackage);
             if (header == HEADER_COMMS) {
                 switch(headerPackage) {
                     case HEADER_RX_KEY_SETTINGS: 
                         if (bytes_received == sizeof(newPidSettings)) {
                             memcpy(&newPidSettings,received_data,bytes_received);
-                            if(newPidSettings.checksum == (newPidSettings.header ^ newPidSettings.header_key ^ newPidSettings.kp ^ newPidSettings.ki ^ newPidSettings.kd ^ newPidSettings.center_angle ^ newPidSettings.safety_limits)){   
+                            uint16_t calculateChecksum = (newPidSettings.header ^ newPidSettings.header_key ^ newPidSettings.kp ^ newPidSettings.ki ^ newPidSettings.kd ^ newPidSettings.center_angle ^ newPidSettings.safety_limits);
+                            if(newPidSettings.checksum == calculateChecksum){   
                                 pidParams.safetyLimits = newPidSettings.safety_limits / 100.00;
                                 pidParams.centerAngle = newPidSettings.center_angle / 100.00;
                                 pidParams.kp = newPidSettings.kp / 100.00;
@@ -73,7 +72,7 @@ void communicationHandler(void * param){
                                 xQueueSend(queueNewPidParams,(void*)&pidParams,0);
                             }
                             else{
-                                printf("ERROR CHECKSUM pidSettings\n");
+                                printf("ERROR CHECKSUM pidSettings: calc: %x receive: %x\n",calculateChecksum, newPidSettings.checksum);
                             }
                         }
                     break;
@@ -81,15 +80,18 @@ void communicationHandler(void * param){
                     case HEADER_RX_KEY_CONTROL:
                         if (bytes_received == sizeof(newControlVal)) {  
                             memcpy(&newControlVal,received_data,bytes_received);
-                            if(newControlVal.checksum == (newControlVal.header ^ newControlVal.header_key ^ newControlVal.axis_x ^ newControlVal.axis_y)) {   
+                            uint16_t calculateChecksum = (newControlVal.header ^ newControlVal.header_key ^ newControlVal.axis_x ^ newControlVal.axis_y);
+                            if(newControlVal.checksum == calculateChecksum) {   
                                 contTimeout = 0;
+                                printf("NewControl recibido!\n");
                                 xQueueSend(queueReceiveControl,(void*)&newControlVal,0);
                             }
                             else{
-                                printf("ERROR CHECKSUM newControlVal\n");
+                                printf("ERROR CHECKSUM newControlVal: calc: %x receive: %x\n",calculateChecksum, newControlVal.checksum);
                             }      
                         }
                         else {
+                            esp_log_buffer_hex("COMMS_HANDLER",(uint8_t *)(received_data),bytes_received);
                             printf("\n***** SIZEOFF NO COINCIDE: %d , %d*****\n",bytes_received,sizeof(newControlVal));
                         }
                     break;
@@ -122,30 +124,21 @@ void communicationHandler(void * param){
     vTaskDelete(NULL);
 }
 
-void sendStatus(status_robot_t status){
+void sendDynamicData(robot_dynamic_data_t dynamicData) {
 
-    status.checksum =   status.header ^
-                        status.batVoltage ^
-                        status.batPercent ^
-                        status.batTemp ^
-                        status.tempImu ^
-                        status.tempEscs ^
-                        status.speedR ^
-                        status.speedL ^
-                        (uint16_t)status.pitch ^
-                        (uint16_t)status.roll ^
-                        (uint16_t)status.yaw ^
-                        (uint16_t)status.pid.kp ^
-                        (uint16_t)status.pid.ki ^
-                        (uint16_t)status.pid.kd ^
-                        (uint16_t)status.pid.safetyLimits ^
-                        (uint16_t)status.pid.centerAngle ^
-                        (uint16_t)status.setPoint ^
-                        status.ordenCode ^
-                        status.statusCode;
+    dynamicData.header = HEADER_TX_KEY_STATUS;
 
+    dynamicData.checksum = dynamicData.header ^
+                dynamicData.speedR ^
+                dynamicData.speedL ^
+                dynamicData.pitch ^
+                dynamicData.roll ^
+                dynamicData.yaw ^
+                dynamicData.setPoint ^
+                dynamicData.centerAngle ^
+                dynamicData.statusCode;
 
-    if (xStreamBufferSend(xStreamBufferSender, &status, sizeof(status), 1) != sizeof(status)) {
+    if (xStreamBufferSend(xStreamBufferSender, &dynamicData, sizeof(dynamicData), 1) != sizeof(dynamicData)) {
         /* TODO: Manejar el caso en el que el buffer está lleno y no se pueden enviar datos */
          ESP_LOGI("COMMS", "BUFFER DE TRANSMISION OVERFLOW");
     }

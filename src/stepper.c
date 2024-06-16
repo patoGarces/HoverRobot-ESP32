@@ -111,7 +111,6 @@ void motorsInit(stepper_config_t config) {
 
     setEnableMotors(false);
     setVelMotors(0,0);
-    queueMotorControl = xQueueCreate(1,sizeof(output_motors_t));
     xTaskCreate(controlHandler,"motor control handler task",4096,NULL,5,NULL);
 }
 

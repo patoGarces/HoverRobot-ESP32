@@ -12,6 +12,8 @@
 #define HEADER_RX_KEY_SETTINGS  0xAB03          // key que indica que el paquete recibido de la app es de configuracion
 #define HEADER_TX_KEY_COMMAND   0xAB04          // key que indica que el paquete a enviar es un comando
 
+#define PRECISION_DECIMALS_COMMS 100            // Precision al convertir la data cruda del BLE a float, en este caso 100 = 0.01
+
 enum CommandsToRobot {
     COMMAND_CALIBRATE_IMU,
     COMMAND_ARMED_ROBOT,
@@ -61,7 +63,7 @@ enum {
     uint32_t header;
     uint32_t header_key;
     int32_t  command;
-    uint32_t checksum;
+    uint16_t checksum;
 } command_app_t;
 
 /**
@@ -84,9 +86,25 @@ typedef struct {
     uint16_t ordenCode;
     uint16_t statusCode;
     uint16_t checksum;
-}status_robot_t;
+} status_robot_t;
+
+/**
+ * @brief Esta estructura de datos es la que se envia a la app android
+ */
+typedef struct {
+    uint16_t header;
+    int16_t  speedR;
+    int16_t  speedL;
+    int16_t  pitch;
+    int16_t  roll;
+    int16_t  yaw;
+    int16_t  setPoint;
+    uint16_t centerAngle;
+    uint16_t statusCode;
+    uint16_t checksum;
+} robot_dynamic_data_t;
 
 void spp_wr_task_start_up(void);
 void spp_wr_task_shut_down(void);
-void sendStatus(status_robot_t status);
+void sendDynamicData(robot_dynamic_data_t status);
 #endif

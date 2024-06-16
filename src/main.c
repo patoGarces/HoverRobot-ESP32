@@ -5,6 +5,7 @@
 #include "freertos/queue.h"
 #include "stdio.h"
 #include "math.h"
+#include "esp_log.h"
 
 #include "main.h"
 #include "comms.h"
@@ -53,28 +54,36 @@ static void imuControlHandler(void *pvParameters) {
 
     while(1) {
         if(xQueueReceive(newAnglesQueue,&newAngles,pdMS_TO_TICKS(10))) {
-            // printf("pitch: %f\n",newAngles.pitch);
+        
             statusRobot.roll = newAngles.roll;
             statusRobot.pitch = newAngles.pitch;
             statusRobot.yaw = newAngles.yaw;
             statusRobot.tempImu = (uint16_t)newAngles.temp * 10;
 
-            uint16_t outputPidMotors = (uint16_t)(pidCalculate(statusRobot.pitch) * MAX_VELOCITY); 
+            #ifdef HARDWARE_HOVERROBOT
+                float angleReference = newAngles.roll * -1;
+            #else
+                float angleReference = newAngles.pitch;
+            #endif
+            
+            int16_t outputPidMotors = (uint16_t)(pidCalculate(angleReference) * MAX_VELOCITY); 
 
-            uint16_t deadBand = 3;
-            if(outputPidMotors > deadBand || statusRobot.pitch < -deadBand) {
+            // printf("angle: %f\tout: %d \tstatus: %d\n",angleReference,outputPidMotors,statusRobot.statusCode);
+
+            // uint16_t deadBand = 3;
+            // if(outputPidMotors > deadBand || outputPidMotors < -deadBand) {
                 speedMotors.motorL = outputPidMotors + attitudeControlMotor.motorL;
                 speedMotors.motorR = outputPidMotors + attitudeControlMotor.motorR;
-            }
-            else {
-                speedMotors.motorL = 0;
-                speedMotors.motorR = 0;
-            }
+            // }
+            // else {
+            //     speedMotors.motorL = 0;
+            //     speedMotors.motorR = 0;
+            // }
 
             speedMotors.motorL = cutSpeedRange(speedMotors.motorL);
             speedMotors.motorR = cutSpeedRange(speedMotors.motorR);
 
-            safetyLimitProm[safetyLimitPromIndex++] = statusRobot.pitch;
+            safetyLimitProm[safetyLimitPromIndex++] = angleReference;
             if (safetyLimitPromIndex>2) {
                 safetyLimitPromIndex = 0;
             }
@@ -87,14 +96,14 @@ static void imuControlHandler(void *pvParameters) {
                     speedMotors.motorL = 0;
                     speedMotors.motorR = 0;
                     statusRobot.statusCode = STATUS_ROBOT_ARMED;
-                    printf("SAFETYLIMITS: %f\n",statusRobot.pid.centerAngle);
+                    printf("DISABLED, SAFETYLIMITS: %f\n",statusRobot.pid.safetyLimits);
                 }
             }
             else { 
-                if (((statusRobot.pitch > (statusRobot.pid.centerAngle-1)) && (statusRobot.pitch < (statusRobot.pid.centerAngle+1)))) { 
+                if (((angleReference > (statusRobot.pid.centerAngle-1)) && (angleReference < (statusRobot.pid.centerAngle+1)))) { 
                     pidSetEnable();   
                     speedMotors.enable = true;
-                    statusRobot.statusCode = STATUS_ROBOT_STABILIZED;                                                   
+                    statusRobot.statusCode = STATUS_ROBOT_STABILIZED;                                              
                 }
             }
             
@@ -110,14 +119,15 @@ static void imuControlHandler(void *pvParameters) {
             statusRobot.speedL = speedMotors.motorL;
             statusRobot.speedR = speedMotors.motorR;
             // gpio_set_level(PIN_OSCILO, 0);
+
+            // printf("Pitch: %f\tRoll: %f\tEnablePid: %d\tEnableMotor:%d\n",newAngles.pitch,newAngles.roll,pidGetEnable(),speedMotors.enable);
+            
+            // ESP_LOGE("IMU_CONTROL_HANDLER", "Pitch: %f\tRoll: %f\tEnablePid: %d\tEnableMotor:%d\n",newAngles.pitch,newAngles.roll,pidGetEnable(),speedMotors.enable);
         }
-    
     }
 }
 
 static void attitudeControl(void *pvParameters){
-
-    // queueReceiveControl = xQueueCreate(1, sizeof(control_app_t));
 
     control_app_t newControlVal;
     output_motors_t newVel; // TODO: para prueba PWM
@@ -164,9 +174,6 @@ static void commsManager(void *pvParameters){
     pid_params_t newPidParams;
     command_app_t newCommand;
 
-    queueNewPidParams = xQueueCreate(1,sizeof(pid_params_t));
-    queueNewCommand = xQueueCreate(1, sizeof(command_app_t));
-
     while (1) {
         
         if(xQueueReceive(queueNewPidParams,&newPidParams,0)) {
@@ -199,7 +206,20 @@ static void commsManager(void *pvParameters){
             statusRobot.tempEscs = cont1;
             // uint16_t ordenCode;
             // uint16_t statusCode;
-            sendStatus(statusRobot);
+
+            // TODO: eliminar conversion
+            robot_dynamic_data_t newData = {
+                .header = HEADER_TX_KEY_STATUS,
+                .speedR = statusRobot.speedR,
+                .speedL = statusRobot.speedL,
+                .pitch = statusRobot.pitch * PRECISION_DECIMALS_COMMS,
+                .roll = statusRobot.roll * PRECISION_DECIMALS_COMMS,
+                .yaw = statusRobot.yaw * PRECISION_DECIMALS_COMMS,
+                .setPoint = statusRobot.setPoint * PRECISION_DECIMALS_COMMS,
+                .centerAngle = statusRobot.pid.centerAngle * PRECISION_DECIMALS_COMMS,
+                .statusCode = statusRobot.statusCode
+            };
+            sendDynamicData(newData);
         }
         // if(GRAPH_ARDUINO_PLOTTER){
             //Envio log para graficar en arduino serial plotter
@@ -207,8 +227,8 @@ static void commsManager(void *pvParameters){
         // }
 
         // testHardwareVibration();
-        // printf(">angle:%f\n>outputMotor:%f\n",statusRobot.pitch/10.0,statusRobot.speedL/100.0);
-        // printf("angle:%f,set_point: %f,kp: %f,ki: %f,kd: %f,output_motor:%d\n",statusRobot.pitch,statusRobot.setPoint,statusRobot.pid.kp,statusRobot.pid.ki,statusRobot.pid.kd,statusRobot.speedL);
+        // printf(">angle:%f\n>outputMotor:%f\n",angleReference/10.0,statusRobot.speedL/100.0);
+        // printf("angle:%f,set_point: %f,kp: %f,ki: %f,kd: %f,output_motor:%d\n",angleReference,statusRobot.setPoint,statusRobot.pid.kp,statusRobot.pid.ki,statusRobot.pid.kd,statusRobot.speedL);
    
         vTaskDelay(pdMS_TO_TICKS(100));
     }
@@ -244,15 +264,35 @@ void testHardwareVibration(void) {
     }
 }
 
+static void ledHandler(void *pvParameters) {
+
+    while(1) {
+        gpio_set_level(PIN_LED,1);
+        vTaskDelay(pdMS_TO_TICKS(100));
+        gpio_set_level(PIN_LED,0);
+        vTaskDelay(pdMS_TO_TICKS(200));
+        // speedMotors.enable = 0xBB;
+        // speedMotors.motorL = 0xCC;
+        // speedMotors.motorR = 0xDD;
+        // xQueueSend(queueMotorControl,&speedMotors,pdMS_TO_TICKS(1));
+        // testHardwareVibration();
+    }
+}
+
 void app_main() {
     pid_params_t readParams={0};
 
     gpio_set_direction(PIN_LED , GPIO_MODE_OUTPUT);
-    gpio_set_level(PIN_LED, 0);
+    gpio_set_level(PIN_LED, 1);
 
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[PIN_OSCILO], PIN_FUNC_GPIO);
     gpio_set_direction(PIN_OSCILO , GPIO_MODE_OUTPUT);
     gpio_set_level(PIN_OSCILO, 0);
+
+    queueReceiveControl = xQueueCreate(1, sizeof(control_app_t));
+    queueNewPidParams = xQueueCreate(1,sizeof(pid_params_t));
+    queueNewCommand = xQueueCreate(1, sizeof(command_app_t));
+    queueMotorControl = xQueueCreate(1,sizeof(output_motors_t));
 
     storageInit();
 
@@ -301,8 +341,6 @@ void app_main() {
             .lsPwm4Gpio = -1,
         };
         pwmServoInit(configServos);
-
-        // queueMotorControl = xQueueCreate(1,sizeof(output_motors_t));
     #endif
 
     #ifdef HARDWARE_PROTOTYPE
@@ -321,16 +359,5 @@ void app_main() {
     xTaskCreatePinnedToCore(imuControlHandler,"Imu Control Task",4096,NULL,IMU_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);
     xTaskCreate(attitudeControl,"attitude control Task",2048,NULL,4,NULL);
     xTaskCreate(commsManager,"communication manager",4096,NULL,COMM_HANDLER_PRIORITY,NULL);
-
-    while(1) {
-        gpio_set_level(PIN_LED,1);
-        vTaskDelay(pdMS_TO_TICKS(100));
-        gpio_set_level(PIN_LED,0);
-        vTaskDelay(pdMS_TO_TICKS(200));
-        // speedMotors.enable = 0xBB;
-        // speedMotors.motorL = 0xCC;
-        // speedMotors.motorR = 0xDD;
-        // xQueueSend(queueMotorControl,&speedMotors,pdMS_TO_TICKS(1));
-        // testHardwareVibration();
-    }
+    xTaskCreate(ledHandler,"Led handler",1024,NULL,2,NULL);
 }
