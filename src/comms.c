@@ -50,67 +50,63 @@ void communicationHandler(void * param){
 
         if (bytes_received > 1) {
             // esp_log_buffer_hex("COMMS_HANDLER",(uint8_t *)(received_data),bytes_received);
+            uint16_t headerPackage = getUint16(0,received_data);
 
-            uint16_t header = getUint16(0,received_data);
-            uint16_t headerPackage = getUint16(2,received_data);
+            // printf("headerPackage: %x\n",headerPackage);
+            switch(headerPackage) {
+                case HEADER_PACKAGE_SETTINGS: 
+                    if (bytes_received == sizeof(newPidSettings)) {
+                        memcpy(&newPidSettings,received_data,bytes_received);
+                        uint16_t calculateChecksum = (newPidSettings.header_package ^ newPidSettings.kp ^ newPidSettings.ki ^ newPidSettings.kd ^ newPidSettings.center_angle ^ newPidSettings.safety_limits);
+                        if(newPidSettings.checksum == calculateChecksum){   
+                            pidParams.safetyLimits = newPidSettings.safety_limits / 100.00;
+                            pidParams.centerAngle = newPidSettings.center_angle / 100.00;
+                            pidParams.kp = newPidSettings.kp / 100.00;
+                            pidParams.ki = newPidSettings.ki / 100.00;
+                            pidParams.kd = newPidSettings.kd / 100.00;
 
-            // printf("header: %x, headerPackage: %x\n",header,headerPackage);
-            if (header == HEADER_COMMS) {
-                switch(headerPackage) {
-                    case HEADER_RX_KEY_SETTINGS: 
-                        if (bytes_received == sizeof(newPidSettings)) {
-                            memcpy(&newPidSettings,received_data,bytes_received);
-                            uint16_t calculateChecksum = (newPidSettings.header ^ newPidSettings.header_key ^ newPidSettings.kp ^ newPidSettings.ki ^ newPidSettings.kd ^ newPidSettings.center_angle ^ newPidSettings.safety_limits);
-                            if(newPidSettings.checksum == calculateChecksum){   
-                                pidParams.safetyLimits = newPidSettings.safety_limits / 100.00;
-                                pidParams.centerAngle = newPidSettings.center_angle / 100.00;
-                                pidParams.kp = newPidSettings.kp / 100.00;
-                                pidParams.ki = newPidSettings.ki / 100.00;
-                                pidParams.kd = newPidSettings.kd / 100.00;
-
-                                printf("\n######## Nuevo PID RECIBIDO RAAAY #######\n");
-                                xQueueSend(queueNewPidParams,(void*)&pidParams,0);
-                            }
-                            else{
-                                printf("ERROR CHECKSUM pidSettings: calc: %x receive: %x\n",calculateChecksum, newPidSettings.checksum);
-                            }
+                            printf("\n######## Nuevo PID RECIBIDO RAAAY #######\n");
+                            xQueueSend(queueNewPidParams,(void*)&pidParams,0);
                         }
-                    break;
+                        else{
+                            printf("ERROR CHECKSUM pidSettings: calc: %x receive: %x\n",calculateChecksum, newPidSettings.checksum);
+                        }
+                    }
+                break;
 
-                    case HEADER_RX_KEY_CONTROL:
-                        if (bytes_received == sizeof(newControlVal)) {  
-                            memcpy(&newControlVal,received_data,bytes_received);
-                            uint16_t calculateChecksum = (newControlVal.header ^ newControlVal.header_key ^ newControlVal.axis_x ^ newControlVal.axis_y);
-                            if(newControlVal.checksum == calculateChecksum) {   
-                                contTimeout = 0;
-                                printf("NewControl recibido!\n");
-                                xQueueSend(queueReceiveControl,(void*)&newControlVal,0);
-                            }
-                            else{
-                                printf("ERROR CHECKSUM newControlVal: calc: %x receive: %x\n",calculateChecksum, newControlVal.checksum);
-                            }      
+                case HEADER_PACKAGE_CONTROL:
+                    if (bytes_received == sizeof(newControlVal)) {  
+                        memcpy(&newControlVal,received_data,bytes_received);
+                        uint16_t calculateChecksum = (newControlVal.header_package ^ newControlVal.axis_x ^ newControlVal.axis_y);
+                        if(newControlVal.checksum == calculateChecksum) {   
+                            contTimeout = 0;
+                            printf("NewControl recibido!\n");
+                            xQueueSend(queueReceiveControl,(void*)&newControlVal,0);
                         }
-                        else {
-                            esp_log_buffer_hex("COMMS_HANDLER",(uint8_t *)(received_data),bytes_received);
-                            printf("\n***** SIZEOFF NO COINCIDE: %d , %d*****\n",bytes_received,sizeof(newControlVal));
-                        }
-                    break;
+                        else{
+                            printf("ERROR CHECKSUM newControlVal: calc: %x receive: %x\n",calculateChecksum, newControlVal.checksum);
+                        }      
+                    }
+                    else {
+                        esp_log_buffer_hex("COMMS_HANDLER",(uint8_t *)(received_data),bytes_received);
+                        printf("\n***** SIZEOFF NO COINCIDE: %d , %d*****\n",bytes_received,sizeof(newControlVal));
+                    }
+                break;
 
-                    case HEADER_TX_KEY_COMMAND:
-                        if (bytes_received == sizeof(newCommand)) { 
-                            memcpy(&newCommand,received_data,bytes_received); 
-                            if(newCommand.checksum == (newCommand.header ^ newCommand.header_key ^ newCommand.command)) {   
-                                xQueueSend(queueNewCommand,(void*)&newCommand,0);
-                            }
-                            else{
-                                printf("ERROR CHECKSUM newCommand\n");
-                            }      
+                case HEADER_PACKAGE_COMMAND:
+                    if (bytes_received == sizeof(newCommand)) { 
+                        memcpy(&newCommand,received_data,bytes_received); 
+                        if(newCommand.checksum == (newCommand.header_package ^ newCommand.command)) {   
+                            xQueueSend(queueNewCommand,(void*)&newCommand,0);
                         }
-                    break;
-                    default:
-                        printf("\n\nComando no reconocido\n\n"); 
-                    break;
-                }
+                        else{
+                            printf("ERROR CHECKSUM newCommand\n");
+                        }      
+                    }
+                break;
+                default:
+                    printf("\n\nComando no reconocido\n\n"); 
+                break;
             }
         }
         vTaskDelay(pdMS_TO_TICKS(10));  
@@ -126,9 +122,9 @@ void communicationHandler(void * param){
 
 void sendDynamicData(robot_dynamic_data_t dynamicData) {
 
-    dynamicData.header = HEADER_TX_KEY_STATUS;
+    dynamicData.header_package = HEADER_PACKAGE_STATUS;
 
-    dynamicData.checksum = dynamicData.header ^
+    dynamicData.checksum = dynamicData.header_package ^
                 dynamicData.speedR ^
                 dynamicData.speedL ^
                 dynamicData.pitch ^

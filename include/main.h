@@ -3,8 +3,8 @@
 #include "stdint.h"
 
 
-#define HARDWARE_PROTOTYPE
-// #define HARDWARE_HOVERROBOT
+// #define HARDWARE_PROTOTYPE
+#define HARDWARE_HOVERROBOT
 
 #define PERIOD_IMU_MS           100
 #define MPU_HANDLER_PRIORITY    configMAX_PRIORITIES - 1

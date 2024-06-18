@@ -314,7 +314,7 @@ static void print_write_buffer(void)
 
 void sendStatusToRobot(robot_dynamic_data_t newFrame) {
 
-    newFrame.checksum = newFrame.header ^
+    newFrame.checksum = newFrame.header_package ^
                         newFrame.speedR ^
                         newFrame.speedL ^
                         newFrame.pitch ^
@@ -370,19 +370,6 @@ void uart_task(void *pvParameters)
                         break;
                     }
 
-                    robot_dynamic_data_t newFrame = {
-                        .header = HEADER_TX_KEY_STATUS,
-                        .speedR = 2,
-                        .speedL = 3,
-                        .pitch = 4,
-                        .roll = 5,
-                        .yaw = 6,
-                        .setPoint = 7,
-                        .centerAngle = 8,
-                        .statusCode = 9
-                    };
-
-                    sendStatusToRobot(newFrame);
                     // if(event.size <= (spp_mtu_size - 3)){
                     //     esp_ble_gatts_send_indicate(spp_gatts_if, spp_conn_id, spp_handle_table[SPP_IDX_SPP_DATA_NTY_VAL],event.size, temp, false);
                     // }else if(event.size > (spp_mtu_size - 3)){

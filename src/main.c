@@ -20,8 +20,15 @@
 
 #define GRAPH_ARDUINO_PLOTTER   false
 #define MAX_VELOCITY            1000.00
-#define VEL_MAX_CONTROL         100    
-#define MAX_ANGLE_JOYSTICK      8.0
+
+
+#ifdef HARDWARE_HOVERROBOT
+    #define MAX_ANGLE_JOYSTICK          4.0
+    #define MAX_ROTATION_RATE_CONTROL   50
+#else
+    #define MAX_ANGLE_JOYSTICK      8.0
+    #define MAX_ROTATION_RATE_CONTROL         100
+#endif
 
 extern QueueSetHandle_t newAnglesQueue;                 // Recibo nuevos angulos obtenidos del MPU
 QueueSetHandle_t queueMotorControl;                     // Envio nuevos valores de salida para el control de motores
@@ -68,7 +75,17 @@ static void imuControlHandler(void *pvParameters) {
             
             int16_t outputPidMotors = (uint16_t)(pidCalculate(angleReference) * MAX_VELOCITY); 
 
-            // printf("angle: %f\tout: %d \tstatus: %d\n",angleReference,outputPidMotors,statusRobot.statusCode);
+            // // kickstart for brushless motor
+            // #ifdef HARDWARE_HOVERROBOT
+            // const uint8_t kickstart = 90;
+            // const uint8_t deadband = 90;
+            //     if(outputPidMotors < deadband && outputPidMotors >= 0) {
+            //         outputPidMotors += kickstart;
+            //     }
+            //     else if (outputPidMotors >-deadband && outputPidMotors < 0) {
+            //         outputPidMotors -= kickstart;
+            //     }
+            // #endif
 
             // uint16_t deadBand = 3;
             // if(outputPidMotors > deadBand || outputPidMotors < -deadBand) {
@@ -139,12 +156,12 @@ static void attitudeControl(void *pvParameters){
                          ( TickType_t ) 1 ) == pdPASS) {
 
             // Prueba directa control de motores:
-            // attitudeControlMotor.motorL = newControlVal.axis_x * -1 * VEL_MAX_CONTROL + newControlVal.axis_y * -1 * VEL_MAX_CONTROL;
-            // attitudeControlMotor.motorR = newControlVal.axis_x *  VEL_MAX_CONTROL + newControlVal.axis_y * -1 * VEL_MAX_CONTROL;
+            // attitudeControlMotor.motorL = newControlVal.axis_x * -1 * MAX_ROTATION_RATE_CONTROL + newControlVal.axis_y * -1 * MAX_ROTATION_RATE_CONTROL;
+            // attitudeControlMotor.motorR = newControlVal.axis_x *  MAX_ROTATION_RATE_CONTROL + newControlVal.axis_y * -1 * MAX_ROTATION_RATE_CONTROL;
             // setVelMotors(attitudeControlMotor.motorL,attitudeControlMotor.motorR);
 
-            attitudeControlMotor.motorL = (newControlVal.axis_x / 100.00) * -1 * VEL_MAX_CONTROL;
-            attitudeControlMotor.motorR = (newControlVal.axis_x / 100.00) *  VEL_MAX_CONTROL;
+            attitudeControlMotor.motorL = (newControlVal.axis_x / 100.00) * -1 * MAX_ROTATION_RATE_CONTROL;
+            attitudeControlMotor.motorR = (newControlVal.axis_x / 100.00) *  MAX_ROTATION_RATE_CONTROL;
 
             float setPoint = statusRobot.pid.centerAngle + (newControlVal.axis_y / 100.00) * MAX_ANGLE_JOYSTICK; // Max 5 grados
 
@@ -199,7 +216,6 @@ static void commsManager(void *pvParameters){
             if(cont1>50){
                 cont1 =0;
             }
-            statusRobot.header = HEADER_TX_KEY_STATUS;
             statusRobot.batVoltage = 10;
             statusRobot.batPercent = 55;
             statusRobot.batTemp = cont1;
@@ -209,7 +225,6 @@ static void commsManager(void *pvParameters){
 
             // TODO: eliminar conversion
             robot_dynamic_data_t newData = {
-                .header = HEADER_TX_KEY_STATUS,
                 .speedR = statusRobot.speedR,
                 .speedL = statusRobot.speedL,
                 .pitch = statusRobot.pitch * PRECISION_DECIMALS_COMMS,

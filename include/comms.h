@@ -6,11 +6,10 @@
 
 #define TIMEOUT_COMMS           15              // Timeout maximo sin recibir communicacion de la app, en ms /10, ej: 15 = 150ms
 
-#define HEADER_COMMS            0xABC0
-#define HEADER_TX_KEY_STATUS    0xAB01          // key a enviar que indica que el paquete enviado a la app es un status
-#define HEADER_RX_KEY_CONTROL   0xAB02          // key que indica que el paquete recibido de la app es de control
-#define HEADER_RX_KEY_SETTINGS  0xAB03          // key que indica que el paquete recibido de la app es de configuracion
-#define HEADER_TX_KEY_COMMAND   0xAB04          // key que indica que el paquete a enviar es un comando
+#define HEADER_PACKAGE_STATUS    0xAB01          // key a enviar que indica que el paquete enviado a la app es un status
+#define HEADER_PACKAGE_CONTROL   0xAB02          // key que indica que el paquete recibido de la app es de control
+#define HEADER_PACKAGE_SETTINGS  0xAB03          // key que indica que el paquete recibido de la app es de configuracion
+#define HEADER_PACKAGE_COMMAND   0xAB04          // key que indica que el paquete a enviar es un comando
 
 #define PRECISION_DECIMALS_COMMS 100            // Precision al convertir la data cruda del BLE a float, en este caso 100 = 0.01
 
@@ -35,8 +34,7 @@ enum {
  * @brief Estructura de datos de configuracion recibida de la app
  */
  typedef struct {
-    uint16_t header;
-    uint16_t header_key;
+    uint16_t header_package;
     uint16_t kp;
     uint16_t ki;
     uint16_t kd;
@@ -49,8 +47,7 @@ enum {
  * @brief Estructura de datos de control recibida de la app
  */
  typedef struct {
-    uint16_t header;
-    uint16_t header_key;
+    uint16_t header_package;
     int16_t  axis_x;
     int16_t  axis_y;
     uint16_t checksum;
@@ -60,8 +57,7 @@ enum {
  * @brief Estructura de datos de comandos recibida de la app
  */
  typedef struct {
-    uint32_t header;
-    uint32_t header_key;
+    uint32_t header_package;
     int32_t  command;
     uint16_t checksum;
 } command_app_t;
@@ -70,7 +66,7 @@ enum {
  * @brief Esta estructura de datos es la que se envia a la app android
  */
 typedef struct {
-    uint16_t header;
+    uint16_t header_package;
     uint16_t batVoltage;
     uint16_t batPercent;
     uint16_t batTemp;
@@ -92,7 +88,7 @@ typedef struct {
  * @brief Esta estructura de datos es la que se envia a la app android
  */
 typedef struct {
-    uint16_t header;
+    uint16_t header_package;
     int16_t  speedR;
     int16_t  speedL;
     int16_t  pitch;
