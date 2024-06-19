@@ -21,8 +21,9 @@ TaskHandle_t commsHandle;
 static void communicationHandler(void * param);
 
 void spp_wr_task_start_up(void){
-    xTaskCreatePinnedToCore(communicationHandler, "communicationHandler", 4096, NULL, 5, &commsHandle,COMMS_CORE);
+    xTaskCreatePinnedToCore(communicationHandler, "communicationHandler", 4096, NULL, 10, &commsHandle,COMMS_CORE);
 }
+
 void spp_wr_task_shut_down(void){
     vTaskDelete(commsHandle);
 }
@@ -46,7 +47,7 @@ void communicationHandler(void * param){
     // queueReceiveControl = xQueueCreate(1, sizeof(control_app_t));
     
     while(true) {
-        BaseType_t bytes_received = xStreamBufferReceive(xStreamBufferReceiver, received_data, sizeof(received_data), 0);
+        BaseType_t bytes_received = xStreamBufferReceive(xStreamBufferReceiver, received_data, sizeof(received_data), 0);//25);
 
         if (bytes_received > 1) {
             // esp_log_buffer_hex("COMMS_HANDLER",(uint8_t *)(received_data),bytes_received);
@@ -75,8 +76,8 @@ void communicationHandler(void * param){
                 break;
 
                 case HEADER_PACKAGE_CONTROL:
-                    if (bytes_received == sizeof(newControlVal)) {  
-                        memcpy(&newControlVal,received_data,bytes_received);
+                    // if (bytes_received == sizeof(newControlVal)) {  
+                        memcpy(&newControlVal,received_data,8);//bytes_received);
                         uint16_t calculateChecksum = (newControlVal.header_package ^ newControlVal.axis_x ^ newControlVal.axis_y);
                         if(newControlVal.checksum == calculateChecksum) {   
                             contTimeout = 0;
@@ -86,11 +87,11 @@ void communicationHandler(void * param){
                         else{
                             printf("ERROR CHECKSUM newControlVal: calc: %x receive: %x\n",calculateChecksum, newControlVal.checksum);
                         }      
-                    }
-                    else {
-                        esp_log_buffer_hex("COMMS_HANDLER",(uint8_t *)(received_data),bytes_received);
-                        printf("\n***** SIZEOFF NO COINCIDE: %d , %d*****\n",bytes_received,sizeof(newControlVal));
-                    }
+                    // }
+                    // else {
+                    //     esp_log_buffer_hex("COMMS_HANDLER",(uint8_t *)(received_data),bytes_received);
+                    //     printf("\n***** SIZEOFF NO COINCIDE: %d , %d*****\n",bytes_received,sizeof(newControlVal));
+                    // }
                 break;
 
                 case HEADER_PACKAGE_COMMAND:

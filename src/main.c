@@ -124,9 +124,10 @@ static void imuControlHandler(void *pvParameters) {
                 }
             }
             
-            #if !defined(HARDWARE_PROTOTYPE)
-                uint8_t velMotorToServoR = (speedMotors.motorR/20) + 50;
-                uint8_t velMotorToServoL = (speedMotors.motorL/20) + 50;
+            #ifdef HARDWARE_HOVERROBOT
+                const int8_t calibratePwmOffset = 3;
+                uint16_t velMotorToServoR = (speedMotors.motorR/2) + 500 + calibratePwmOffset;
+                uint16_t velMotorToServoL = (speedMotors.motorL/2) + 500 + calibratePwmOffset;
                 pwmSetOutput(2,velMotorToServoL);
                 pwmSetOutput(3,velMotorToServoR);
                 // printf("PWM OUTPUTS: L: %d R: %d\n",velMotorToServoR,velMotorToServoL);
@@ -281,11 +282,18 @@ void testHardwareVibration(void) {
 
 static void ledHandler(void *pvParameters) {
 
+    uint16_t delay = 1000;
     while(1) {
+        if (isBtConnected()) {
+            delay = 500;
+        }
+        else {
+            delay = 1000;
+        }
         gpio_set_level(PIN_LED,1);
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(delay));
         gpio_set_level(PIN_LED,0);
-        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelay(pdMS_TO_TICKS(delay));
         // speedMotors.enable = 0xBB;
         // speedMotors.motorL = 0xCC;
         // speedMotors.motorR = 0xDD;
@@ -374,5 +382,5 @@ void app_main() {
     xTaskCreatePinnedToCore(imuControlHandler,"Imu Control Task",4096,NULL,IMU_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);
     xTaskCreate(attitudeControl,"attitude control Task",2048,NULL,4,NULL);
     xTaskCreate(commsManager,"communication manager",4096,NULL,COMM_HANDLER_PRIORITY,NULL);
-    xTaskCreate(ledHandler,"Led handler",1024,NULL,2,NULL);
+    xTaskCreate(ledHandler,"Led handler",2048,NULL,2,NULL);
 }
