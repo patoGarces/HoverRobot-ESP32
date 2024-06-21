@@ -9,6 +9,7 @@
 #define SPP_CMD_MAX_LEN            (20)
 #define SPP_STATUS_MAX_LEN         (20)
 #define SPP_DATA_BUFF_MAX_LEN      (2*1024)
+
 ///Attributes State Machine
 enum{
     SPP_IDX_SVC,
@@ -27,7 +28,19 @@ enum{
     SPP_IDX_SPP_STATUS_VAL,
     SPP_IDX_SPP_STATUS_CFG,
 
-    SPP_IDX_NB,
+    // SPP_IDX_NB,
+
+    // Caracteristica settings:
+
+    SETTINGS_IDX_SVC,
+    SETTINGS_IDX_CHAR_READ_DECL,
+    SETTINGS_IDX_CHAR_READ_VAL,
+    SETTINGS_IDX_CHAR_CFG,
+    SETTINGS_IDX_CHAR_WRITE_DECL,
+    SETTINGS_IDX_CHAR_WRITE_VAL,
+    // SETTINGS_IDX_NB,
+
+    LAST_GATT_NUM
 };
 
 void btInit( char* deviceName );

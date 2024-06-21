@@ -75,17 +75,17 @@ static void imuControlHandler(void *pvParameters) {
             
             int16_t outputPidMotors = (uint16_t)(pidCalculate(angleReference) * MAX_VELOCITY); 
 
-            // // kickstart for brushless motor
-            // #ifdef HARDWARE_HOVERROBOT
-            // const uint8_t kickstart = 90;
-            // const uint8_t deadband = 90;
-            //     if(outputPidMotors < deadband && outputPidMotors >= 0) {
-            //         outputPidMotors += kickstart;
-            //     }
-            //     else if (outputPidMotors >-deadband && outputPidMotors < 0) {
-            //         outputPidMotors -= kickstart;
-            //     }
-            // #endif
+            // kickstart for brushless motor
+            #ifdef HARDWARE_HOVERROBOT
+            const uint8_t kickstart = 20;
+            const uint8_t deadband = 20;
+                if(outputPidMotors < deadband && outputPidMotors >= 0) {
+                    outputPidMotors += kickstart;
+                }
+                else if (outputPidMotors >-deadband && outputPidMotors < 0) {
+                    outputPidMotors -= kickstart;
+                }
+            #endif
 
             // uint16_t deadBand = 3;
             // if(outputPidMotors > deadBand || outputPidMotors < -deadBand) {
@@ -147,7 +147,7 @@ static void imuControlHandler(void *pvParameters) {
 
 static void attitudeControl(void *pvParameters){
 
-    control_app_t newControlVal;
+    control_app_raw_t newControlVal;                    // TODO: reemplazar para recibir NO raw
     output_motors_t newVel; // TODO: para prueba PWM
     uint8_t contpwm = 0;
 
@@ -161,10 +161,10 @@ static void attitudeControl(void *pvParameters){
             // attitudeControlMotor.motorR = newControlVal.axis_x *  MAX_ROTATION_RATE_CONTROL + newControlVal.axis_y * -1 * MAX_ROTATION_RATE_CONTROL;
             // setVelMotors(attitudeControlMotor.motorL,attitudeControlMotor.motorR);
 
-            attitudeControlMotor.motorL = (newControlVal.axis_x / 100.00) * -1 * MAX_ROTATION_RATE_CONTROL;
-            attitudeControlMotor.motorR = (newControlVal.axis_x / 100.00) *  MAX_ROTATION_RATE_CONTROL;
+            attitudeControlMotor.motorL = (newControlVal.axisX / 100.00) * -1 * MAX_ROTATION_RATE_CONTROL;
+            attitudeControlMotor.motorR = (newControlVal.axisY / 100.00) *  MAX_ROTATION_RATE_CONTROL;
 
-            float setPoint = statusRobot.pid.centerAngle + (newControlVal.axis_y / 100.00) * MAX_ANGLE_JOYSTICK; // Max 5 grados
+            float setPoint = statusRobot.pid.centerAngle + (newControlVal.axisY / 100.00) * MAX_ANGLE_JOYSTICK;
 
             statusRobot.setPoint = setPoint;
             pidSetSetPoint(setPoint);
@@ -187,10 +187,10 @@ static void attitudeControl(void *pvParameters){
 }
 
 
-static void commsManager(void *pvParameters){
-    uint8_t cont1 = 0;
+static void commsManager(void *pvParameters) {
+    uint8_t lastStateIsConnected = false;
     pid_params_t newPidParams;
-    command_app_t newCommand;
+    command_app_raw_t newCommand;
 
     while (1) {
         
@@ -213,14 +213,24 @@ static void commsManager(void *pvParameters){
             }            
         }
         if (isBtConnected()) {
-            cont1++;
-            if(cont1>50){
-                cont1 =0;
+
+            if (!lastStateIsConnected) {
+                robot_local_configs_t newConfig = {
+                    .kp = statusRobot.pid.kd,
+                    .ki = statusRobot.pid.ki,
+                    .kd = statusRobot.pid.kd,
+                    .centerAngle = statusRobot.pid.centerAngle,
+                    .safetyLimits = statusRobot.pid.safetyLimits,
+                };
+                printf("ENVIO CONFIG LOCAL\n");
+
+                sendLocalConfig(newConfig);
             }
-            statusRobot.batVoltage = 10;
-            statusRobot.batPercent = 55;
-            statusRobot.batTemp = cont1;
-            statusRobot.tempEscs = cont1;
+            
+            // statusRobot.batVoltage = 10;
+            // statusRobot.batPercent = 55;
+            // statusRobot.batTemp = cont1;
+            // statusRobot.tempEscs = cont1;
             // uint16_t ordenCode;
             // uint16_t statusCode;
 
@@ -237,6 +247,9 @@ static void commsManager(void *pvParameters){
             };
             sendDynamicData(newData);
         }
+
+        lastStateIsConnected = isBtConnected();
+
         // if(GRAPH_ARDUINO_PLOTTER){
             //Envio log para graficar en arduino serial plotter
             //printf("angle_x:%f,set_point: %f,output_pid: %f, output_motor:%d\n",newAngles[AXIS_ANGLE_Y],CENTER_ANGLE_MOUNTED,outputPid,outputMotors.motorL);
@@ -245,7 +258,6 @@ static void commsManager(void *pvParameters){
         // testHardwareVibration();
         // printf(">angle:%f\n>outputMotor:%f\n",angleReference/10.0,statusRobot.speedL/100.0);
         // printf("angle:%f,set_point: %f,kp: %f,ki: %f,kd: %f,output_motor:%d\n",angleReference,statusRobot.setPoint,statusRobot.pid.kp,statusRobot.pid.ki,statusRobot.pid.kd,statusRobot.speedL);
-   
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
@@ -312,9 +324,9 @@ void app_main() {
     gpio_set_direction(PIN_OSCILO , GPIO_MODE_OUTPUT);
     gpio_set_level(PIN_OSCILO, 0);
 
-    queueReceiveControl = xQueueCreate(1, sizeof(control_app_t));
+    queueReceiveControl = xQueueCreate(1, sizeof(control_app_raw_t));
     queueNewPidParams = xQueueCreate(1,sizeof(pid_params_t));
-    queueNewCommand = xQueueCreate(1, sizeof(command_app_t));
+    queueNewCommand = xQueueCreate(1, sizeof(command_app_raw_t));
     queueMotorControl = xQueueCreate(1,sizeof(output_motors_t));
 
     storageInit();

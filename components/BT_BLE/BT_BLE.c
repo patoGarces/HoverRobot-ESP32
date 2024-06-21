@@ -33,9 +33,14 @@
 static const uint16_t spp_service_uuid = 0xABF0;
 /// Characteristic UUID
 #define ESP_GATT_UUID_SPP_DATA_RECEIVE      0xABF1      // recepcion del bluetooth
-#define ESP_GATT_UUID_SPP_DATA_NOTIFY       0xABF2      // transmision AL bluetooth
+#define ESP_GATT_UUID_SPP_DATA_NOTIFY       0xABF2      // transmision al bluetooth
 #define ESP_GATT_UUID_SPP_COMMAND_RECEIVE   0xABF3      // recepcion del bluetooth
-#define ESP_GATT_UUID_SPP_COMMAND_NOTIFY    0xABF4      // transmision AL bluetooth
+#define ESP_GATT_UUID_SPP_COMMAND_NOTIFY    0xABF4      // transmision al bluetooth
+
+// UUID caracteristicas de settings:
+#define ESP_GATT_UUID_SETTINGS_RECEIVE   0xABFA // 9      // recepcion del bluetooth
+#define ESP_GATT_UUID_SETTINGS_NOTIFY    0xABF9 // A      // transmision al bluetooth
+
 
 #ifdef SUPPORT_HEARTBEAT
 #define ESP_GATT_UUID_SPP_HEARTBEAT         0xABF5
@@ -71,7 +76,7 @@ static bool enable_data_ntf = false;
 static bool is_connected = false;
 static esp_bd_addr_t spp_remote_bda = {0x0,};
 
-static uint16_t spp_handle_table[SPP_IDX_NB];
+static uint16_t spp_handle_table[LAST_GATT_NUM]; //[SPP_IDX_NB];    // TODO: renombrar
 
 static esp_ble_adv_params_t spp_adv_params = {
     .adv_int_min        = 0x20,
@@ -170,8 +175,29 @@ static const uint8_t  spp_heart_beat_val[2] = {0x00, 0x00};
 static const uint8_t  spp_heart_beat_ccc[2] = {0x00, 0x00};
 #endif
 
+
+
+
+
+
+// Settings service - data receive characteristic, read&write without response
+static const uint16_t settings_data_read_uuid = ESP_GATT_UUID_SETTINGS_RECEIVE;
+static const uint8_t  settings_data_read_val[20] = {0x00};
+
+// Settings service - data notify characteristic, notify&read
+static const uint16_t settings_notify_uuid = ESP_GATT_UUID_SETTINGS_NOTIFY;
+static const uint8_t  settings_notify_val[20] = {0x00};
+static const uint8_t settings_notify_ccc[2] = {0x00, 0x00};
+
+// // Valores iniciales de las características
+// static const uint8_t char_prop_read_settings = ESP_GATT_CHAR_PROP_BIT_READ;
+// static const uint8_t char_prop_read_write_settings = ESP_GATT_CHAR_PROP_BIT_WRITE | ESP_GATT_CHAR_PROP_BIT_READ;
+
+
+
+
 ///Full HRS Database Description - Used to add attributes into the database
-static const esp_gatts_attr_db_t spp_gatt_db[SPP_IDX_NB] =
+static const esp_gatts_attr_db_t spp_gatt_db[LAST_GATT_NUM] = //SPP_IDX_NB] =
 {
     //SPP -  Service Declaration
     [SPP_IDX_SVC]                      	=
@@ -244,13 +270,42 @@ static const esp_gatts_attr_db_t spp_gatt_db[SPP_IDX_NB] =
     {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ|ESP_GATT_PERM_WRITE,
     sizeof(uint16_t),sizeof(spp_data_notify_ccc), (uint8_t *)spp_heart_beat_ccc}},
 #endif
+
+    // Caracteristicas de settings 
+    // Declaración de la característica de lectura
+    [SETTINGS_IDX_CHAR_READ_DECL] =
+    {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ,
+    CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write}},
+
+    // Valor de la característica de lectura
+    [SETTINGS_IDX_CHAR_READ_VAL] =
+    {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&settings_data_read_uuid, ESP_GATT_PERM_READ|ESP_GATT_PERM_WRITE,
+    sizeof(settings_data_read_val), sizeof(settings_data_read_val), (uint8_t *)settings_data_read_val}},
+
+    // Descriptor de Configuración del Cliente (CCC)
+    [SETTINGS_IDX_CHAR_CFG] =
+    {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
+    sizeof(uint16_t), sizeof(settings_notify_ccc), (uint8_t *)&settings_notify_ccc}},
+
+    // Declaración de la característica de escritura
+    [SETTINGS_IDX_CHAR_WRITE_DECL] =
+    {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ,
+    CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write}},
+
+    // Valor de la característica de escritura
+    [SETTINGS_IDX_CHAR_WRITE_VAL] =
+    {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&settings_notify_uuid, ESP_GATT_PERM_WRITE,
+    sizeof(settings_notify_val), sizeof(settings_notify_val), (uint8_t *)settings_notify_val}}
+
 };
 
 static uint8_t find_char_and_desr_index(uint16_t handle)
 {
     uint8_t error = 0xff;
 
-    for(int i = 0; i < SPP_IDX_NB ; i++){
+    // for(int i = 0; i < SPP_IDX_NB ; i++){
+    for(int i = 0; i < LAST_GATT_NUM ; i++){
+        
         if(handle == spp_handle_table[i]){
             return i;
         }
@@ -312,36 +367,38 @@ static void print_write_buffer(void)
     }
 }
 
-void sendStatusToRobot(robot_dynamic_data_t newFrame) {
+// void sendStatusToRobot(robot_dynamic_data_t newFrame) {
 
-    newFrame.checksum = newFrame.header_package ^
-                        newFrame.speedR ^
-                        newFrame.speedL ^
-                        newFrame.pitch ^
-                        newFrame.roll ^
-                        newFrame.yaw ^
-                        newFrame.setPoint ^
-                        newFrame.centerAngle ^
-                        newFrame.statusCode;
+//     // Asignar memoria para los datos a enviar
+//     uint8_t *temp = (uint8_t *)malloc(sizeof(newFrame));
+//     if (temp == NULL) {
+//         ESP_LOGE(GATTS_TABLE_TAG, "%s malloc.1 failed\n", __func__);
+//     } else {
+//         // Copiar los datos de la estructura a la memoria asignada
+//         memcpy(temp, &newFrame, sizeof(newFrame));
 
-    // Asignar memoria para los datos a enviar
-    uint8_t *temp = (uint8_t *)malloc(sizeof(newFrame));
-    if (temp == NULL) {
-        ESP_LOGE(GATTS_TABLE_TAG, "%s malloc.1 failed\n", __func__);
-    } else {
-        // Copiar los datos de la estructura a la memoria asignada
-        memcpy(temp, &newFrame, sizeof(newFrame));
+//         // Verificar el tamaño del paquete antes de enviar
+//         if (sizeof(newFrame) <= (spp_mtu_size - 3)) {
+//             esp_ble_gatts_send_indicate(spp_gatts_if, spp_conn_id, spp_handle_table[SPP_IDX_SPP_DATA_NTY_VAL], sizeof(newFrame), temp, false);
+//         } else {
+//             printf("ERROR TAMAÑO PAQUETE: %d\n", sizeof(newFrame));
+//         }
 
-        // Verificar el tamaño del paquete antes de enviar
-        if (sizeof(newFrame) <= (spp_mtu_size - 3)) {
-            esp_ble_gatts_send_indicate(spp_gatts_if, spp_conn_id, spp_handle_table[SPP_IDX_SPP_DATA_NTY_VAL], sizeof(newFrame), temp, false);
-        } else {
-            printf("ERROR TAMAÑO PAQUETE: %d\n", sizeof(newFrame));
-        }
+//         // Liberar la memoria después de usarla
+//         free(temp);
+//     }
+// }
 
-        // Liberar la memoria después de usarla
-        free(temp);
-    }
+esp_err_t sendLocalSettings(robot_local_configs_t localConfig) {
+
+    if (!is_connected) return ESP_FAIL;
+
+    uint8_t buffer[sizeof(robot_local_configs_t)];
+    memcpy(buffer, &localConfig, sizeof(robot_local_configs_t));
+
+    esp_ble_gatts_set_attr_value(settings_notify_val, sizeof(buffer), buffer);
+    esp_ble_gatts_send_indicate(spp_gatts_if, spp_conn_id, spp_handle_table[SETTINGS_IDX_CHAR_WRITE_VAL], sizeof(buffer), buffer, false);
+    return ESP_OK;      
 }
 
 void uart_task(void *pvParameters)
@@ -369,6 +426,18 @@ void uart_task(void *pvParameters)
                         ESP_LOGE(GATTS_TABLE_TAG, "%s do not enable data Notify\n", __func__);
                         break;
                     }
+
+
+                robot_local_configs_t mockData = {
+                        .headerPackage = HEADER_PACKAGE_LOCAL_CONFIG,
+                        .kp = 52,
+                        .ki = 125,
+                        .kd = 2,
+                        .centerAngle = -1025,
+                        .safetyLimits = 3000,
+                    };
+                    printf("ENVIANDO MOCK\n");
+                    sendLocalSettings(mockData);
 
                     // if(event.size <= (spp_mtu_size - 3)){
                     //     esp_ble_gatts_send_indicate(spp_gatts_if, spp_conn_id, spp_handle_table[SPP_IDX_SPP_DATA_NTY_VAL],event.size, temp, false);
@@ -511,7 +580,9 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
         	esp_ble_gap_config_adv_data_raw((uint8_t *)spp_adv_data, sizeof(spp_adv_data));
 
         	ESP_LOGI(GATTS_TABLE_TAG, "%s %d\n", __func__, __LINE__);
-        	esp_ble_gatts_create_attr_tab(spp_gatt_db, gatts_if, SPP_IDX_NB, SPP_SVC_INST_ID);
+        	// esp_ble_gatts_create_attr_tab(spp_gatt_db, gatts_if, SPP_IDX_NB, SPP_SVC_INST_ID);
+            esp_ble_gatts_create_attr_tab(spp_gatt_db, gatts_if, LAST_GATT_NUM, SPP_SVC_INST_ID);
+
        	break;
     	case ESP_GATTS_READ_EVT:
             res = find_char_and_desr_index(p_data->read.handle);
@@ -622,8 +693,8 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
     	    if (param->add_attr_tab.status != ESP_GATT_OK){
     	        ESP_LOGE(GATTS_TABLE_TAG, "Create attribute table failed, error code=0x%x", param->add_attr_tab.status);
     	    }
-    	    else if (param->add_attr_tab.num_handle != SPP_IDX_NB){
-    	        ESP_LOGE(GATTS_TABLE_TAG, "Create attribute table abnormally, num_handle (%d) doesn't equal to HRS_IDX_NB(%d)", param->add_attr_tab.num_handle, SPP_IDX_NB);
+    	    else if (param->add_attr_tab.num_handle != LAST_GATT_NUM){//SPP_IDX_NB){
+    	        ESP_LOGE(GATTS_TABLE_TAG, "Create attribute table abnormally, num_handle (%d) doesn't equal to HRS_IDX_NB(%d)", param->add_attr_tab.num_handle, LAST_GATT_NUM); //SPP_IDX_NB);
     	    }
     	    else {
     	        memcpy(spp_handle_table, param->add_attr_tab.handles, sizeof(spp_handle_table));
