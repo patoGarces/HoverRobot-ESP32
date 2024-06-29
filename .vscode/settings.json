@@ -50,8 +50,9 @@
         "string.h": "c",
         "esp_bit_defs.h": "c",
         "servo_control.h": "c",
-        "bt_ble.h": "c"
+        "bt_ble.h": "c",
+        "hall_sensor.h": "c"
     },
-    "idf.portWin": "COM9",
+    "idf.portWin": "COM8",
     "idf.adapterTargetName": "esp32"
 }

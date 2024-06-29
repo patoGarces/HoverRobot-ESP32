@@ -18,17 +18,21 @@
 #include "../components/CAN_COMMS/include/CAN_MCB.h"
 #include "../components/SERVO_CONTROL/include/SERVO_CONTROL.h"
 
+#include "../components/HALL_SENSOR/include/HALL_SENSOR.h"
+
 #define GRAPH_ARDUINO_PLOTTER   false
 #define MAX_VELOCITY            1000.00
 
 
 #ifdef HARDWARE_HOVERROBOT
     #define MAX_ANGLE_JOYSTICK          4.0
-    #define MAX_ROTATION_RATE_CONTROL   50
+    #define MAX_ROTATION_RATE_CONTROL   75
 #else
     #define MAX_ANGLE_JOYSTICK      8.0
     #define MAX_ROTATION_RATE_CONTROL         100
 #endif
+
+
 
 extern QueueSetHandle_t newAnglesQueue;                 // Recibo nuevos angulos obtenidos del MPU
 QueueSetHandle_t queueMotorControl;                     // Envio nuevos valores de salida para el control de motores
@@ -39,6 +43,12 @@ QueueHandle_t queueReceiveControl;
 status_robot_t statusRobot;                            // Estructura que contiene todos los parametros de status a enviar a la app
 output_motors_t speedMotors;
 output_motors_t attitudeControlMotor;
+
+
+// TODO: solo para pruebas, mover
+extern int32_t pulseCount;      // TODO: sacar de aca
+int32_t setPointPositionControl = 0;
+uint8_t posControlEnable = true;
 
 int16_t cutSpeedRange(int16_t speed) {
     if (speed > 1000) {
@@ -57,7 +67,7 @@ static void imuControlHandler(void *pvParameters) {
     float safetyLimitProm[5];
     uint8_t safetyLimitPromIndex = 0;
 
-    statusRobot.statusCode = STATUS_ROBOT_ARMED;
+    // statusRobot.statusCode = STATUS_ROBOT_ARMED;
 
     while(1) {
         if(xQueueReceive(newAnglesQueue,&newAngles,pdMS_TO_TICKS(10))) {
@@ -72,14 +82,16 @@ static void imuControlHandler(void *pvParameters) {
             #else
                 float angleReference = newAngles.pitch;
             #endif
+
+            // printf("pitch: %f\troll: %f\n",newAngles.pitch,newAngles.roll);
             
             int16_t outputPidMotors = (uint16_t)(pidCalculate(angleReference) * MAX_VELOCITY); 
 
             // kickstart for brushless motor
             #ifdef HARDWARE_HOVERROBOT
-            const uint8_t kickstart = 20;
-            const uint8_t deadband = 20;
-                if(outputPidMotors < deadband && outputPidMotors >= 0) {
+            const uint8_t kickstart = 40;
+            const uint8_t deadband = 40;
+                if(outputPidMotors < deadband && outputPidMotors > 0) {
                     outputPidMotors += kickstart;
                 }
                 else if (outputPidMotors >-deadband && outputPidMotors < 0) {
@@ -87,18 +99,8 @@ static void imuControlHandler(void *pvParameters) {
                 }
             #endif
 
-            // uint16_t deadBand = 3;
-            // if(outputPidMotors > deadBand || outputPidMotors < -deadBand) {
-                speedMotors.motorL = outputPidMotors + attitudeControlMotor.motorL;
-                speedMotors.motorR = outputPidMotors + attitudeControlMotor.motorR;
-            // }
-            // else {
-            //     speedMotors.motorL = 0;
-            //     speedMotors.motorR = 0;
-            // }
-
-            speedMotors.motorL = cutSpeedRange(speedMotors.motorL);
-            speedMotors.motorR = cutSpeedRange(speedMotors.motorR);
+            speedMotors.motorL = cutSpeedRange(outputPidMotors + attitudeControlMotor.motorL);
+            speedMotors.motorR = cutSpeedRange(outputPidMotors + attitudeControlMotor.motorR);
 
             safetyLimitProm[safetyLimitPromIndex++] = angleReference;
             if (safetyLimitPromIndex>2) {
@@ -136,9 +138,6 @@ static void imuControlHandler(void *pvParameters) {
             #endif
             statusRobot.speedL = speedMotors.motorL;
             statusRobot.speedR = speedMotors.motorR;
-            // gpio_set_level(PIN_OSCILO, 0);
-
-            // printf("Pitch: %f\tRoll: %f\tEnablePid: %d\tEnableMotor:%d\n",newAngles.pitch,newAngles.roll,pidGetEnable(),speedMotors.enable);
             
             // ESP_LOGE("IMU_CONTROL_HANDLER", "Pitch: %f\tRoll: %f\tEnablePid: %d\tEnableMotor:%d\n",newAngles.pitch,newAngles.roll,pidGetEnable(),speedMotors.enable);
         }
@@ -147,42 +146,46 @@ static void imuControlHandler(void *pvParameters) {
 
 static void attitudeControl(void *pvParameters){
 
-    control_app_raw_t newControlVal;                    // TODO: reemplazar para recibir NO raw
-    output_motors_t newVel; // TODO: para prueba PWM
-    uint8_t contpwm = 0;
+    control_app_raw_t newControl;
 
     while(true) {
         if( xQueueReceive(queueReceiveControl,
-                         &newControlVal,
+                         &newControl,
                          ( TickType_t ) 1 ) == pdPASS) {
 
-            // Prueba directa control de motores:
-            // attitudeControlMotor.motorL = newControlVal.axis_x * -1 * MAX_ROTATION_RATE_CONTROL + newControlVal.axis_y * -1 * MAX_ROTATION_RATE_CONTROL;
-            // attitudeControlMotor.motorR = newControlVal.axis_x *  MAX_ROTATION_RATE_CONTROL + newControlVal.axis_y * -1 * MAX_ROTATION_RATE_CONTROL;
-            // setVelMotors(attitudeControlMotor.motorL,attitudeControlMotor.motorR);
+            attitudeControlMotor.motorR = (newControl.axisX / 100.00) *  MAX_ROTATION_RATE_CONTROL;
+            attitudeControlMotor.motorL = attitudeControlMotor.motorR * -1;
 
-            attitudeControlMotor.motorL = (newControlVal.axisX / 100.00) * -1 * MAX_ROTATION_RATE_CONTROL;
-            attitudeControlMotor.motorR = (newControlVal.axisY / 100.00) *  MAX_ROTATION_RATE_CONTROL;
+            float setPoint = statusRobot.pid.centerAngle + (newControl.axisY / 100.00) * MAX_ANGLE_JOYSTICK;
 
-            float setPoint = statusRobot.pid.centerAngle + (newControlVal.axisY / 100.00) * MAX_ANGLE_JOYSTICK;
+            if (!newControl.axisX && !newControl.axisY) {
+                if( pulseCount > (setPointPositionControl + 20)) {
+                    setPoint = statusRobot.pid.centerAngle - 4;
+                    printf("BUSCANDO - SP POS: %ld, actual POS: %ld\n",setPointPositionControl,pulseCount);
+                }
+                else if(pulseCount < (setPointPositionControl - 20)){
+                    setPoint = statusRobot.pid.centerAngle + 4;
+                    printf("BUSCANDO + SP POS: %ld, actual POS: %ld\n",setPointPositionControl,pulseCount);
+                }
+                else {
+                    setPoint = statusRobot.pid.centerAngle;
+                    printf("Estoy dentro de mi pos control\n");
+                }
+
+                if (!posControlEnable) {
+                    setPointPositionControl = pulseCount;
+                    posControlEnable = true;
+                }
+            }
+            else if (posControlEnable){
+                posControlEnable = false;                   // TODO: deberia switchear aca a modo control de velocidad
+            }
 
             statusRobot.setPoint = setPoint;
             pidSetSetPoint(setPoint);
         } 
 
-        // if (xQueueReceive(queueMotorControl,&newVel,pdMS_TO_TICKS(1))) {
-
-
-        //     // contpwm++;
-        //     // if (contpwm> 99) { 
-        //         // contpwm = 60;
-        //     // }
-        //     uint8_t velMotorToServoR = (newVel.motorR/20) + 50;
-        //     uint8_t velMotorToServoL = (newVel.motorL/20) + 50;
-        //     pwmSetOutput(2,velMotorToServoL);
-        //     pwmSetOutput(3,velMotorToServoR);
-        // }
-        vTaskDelay(50);
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
 
@@ -191,6 +194,8 @@ static void commsManager(void *pvParameters) {
     uint8_t lastStateIsConnected = false;
     pid_params_t newPidParams;
     command_app_raw_t newCommand;
+
+    statusRobot.statusCode = STATUS_ROBOT_INIT;
 
     while (1) {
         
@@ -216,14 +221,13 @@ static void commsManager(void *pvParameters) {
 
             if (!lastStateIsConnected) {
                 robot_local_configs_t newConfig = {
-                    .kp = statusRobot.pid.kd,
-                    .ki = statusRobot.pid.ki,
-                    .kd = statusRobot.pid.kd,
-                    .centerAngle = statusRobot.pid.centerAngle,
-                    .safetyLimits = statusRobot.pid.safetyLimits,
+                    .kp = statusRobot.pid.kd * PRECISION_DECIMALS_COMMS,
+                    .ki = statusRobot.pid.ki * PRECISION_DECIMALS_COMMS,
+                    .kd = statusRobot.pid.kd * PRECISION_DECIMALS_COMMS,
+                    .centerAngle = statusRobot.pid.centerAngle * PRECISION_DECIMALS_COMMS,
+                    .safetyLimits = statusRobot.pid.safetyLimits * PRECISION_DECIMALS_COMMS,
                 };
-                printf("ENVIO CONFIG LOCAL\n");
-
+                printf("ENVIO CONFIG LOCAL-> safetylimits: %d\n",newConfig.safetyLimits);
                 sendLocalConfig(newConfig);
             }
             
@@ -311,6 +315,8 @@ static void ledHandler(void *pvParameters) {
         // speedMotors.motorR = 0xDD;
         // xQueueSend(queueMotorControl,&speedMotors,pdMS_TO_TICKS(1));
         // testHardwareVibration();
+
+        printf("SP Pos: %ld\n",setPointPositionControl);
     }
 }
 
@@ -330,6 +336,10 @@ void app_main() {
     queueMotorControl = xQueueCreate(1,sizeof(output_motors_t));
 
     storageInit();
+    readParams = storageReadPidParams();
+    statusRobot.pid = readParams;
+    statusRobot.setPoint = readParams.centerAngle;
+    printf("Hardcode Params: center: %f kp: %f , ki: %f , kd: %f,safetyLimits: %f,centerAngle: %f\n",readParams.centerAngle,readParams.kp,readParams.ki,readParams.kd,readParams.safetyLimits,readParams.centerAngle);
 
     btInit(DEVICE_BT_NAME);
     vTaskDelay(1000);
@@ -341,16 +351,16 @@ void app_main() {
         .priorityTask = MPU_HANDLER_PRIORITY
     };
     mpu6050_initialize(&configMpu);
-    vTaskDelay(pdMS_TO_TICKS(5000));
 
-    readParams = storageReadPidParams();
-    // readParams.kd = 0;
-    // readParams.ki = 0;
-    // readParams.kp = 0.5;
-    statusRobot.pid = readParams;
-    statusRobot.setPoint = readParams.centerAngle;
-    printf("Hardcode Params: center: %f kp: %f , ki: %f , kd: %f,safetyLimits: %f,centerAngle: %f\n",readParams.centerAngle,readParams.kp,readParams.ki,readParams.kd,readParams.safetyLimits,readParams.centerAngle);
-    
+
+    hall_sensors_config_t configHallSensors = {
+        .gpioSensorU = GPIO_NUM_21,
+        .gpioSensorV = GPIO_NUM_22,
+        .gpioSensorW = GPIO_NUM_23
+    };
+
+    hallSensorInit(configHallSensors);
+
     pid_init_t pidConfig = {
         .kp = readParams.kp,
         .ki = readParams.ki,

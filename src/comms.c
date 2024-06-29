@@ -16,6 +16,8 @@ extern QueueHandle_t queueNewPidParams;
 extern QueueHandle_t queueReceiveControl;
 extern QueueHandle_t queueNewCommand;
 
+QueueHandle_t newLocalConfigToSend;
+
 TaskHandle_t commsHandle;
 
 static void communicationHandler(void * param);
@@ -54,11 +56,11 @@ void communicationHandler(void * param) {
                     if (bytes_received == sizeof(newPidSettings)) {
                         memcpy(&newPidSettings,received_data,bytes_received);
  
-                        pidParams.safetyLimits = newPidSettings.safetyLimits / 100.00;
-                        pidParams.centerAngle = newPidSettings.centerAngle / 100.00;
-                        pidParams.kp = newPidSettings.kp / 100.00;
-                        pidParams.ki = newPidSettings.ki / 100.00;
-                        pidParams.kd = newPidSettings.kd / 100.00;
+                        pidParams.safetyLimits = newPidSettings.safetyLimits / PRECISION_DECIMALS_COMMS;
+                        pidParams.centerAngle = newPidSettings.centerAngle / PRECISION_DECIMALS_COMMS;
+                        pidParams.kp = newPidSettings.kp / PRECISION_DECIMALS_COMMS;
+                        pidParams.ki = newPidSettings.ki / PRECISION_DECIMALS_COMMS;
+                        pidParams.kd = newPidSettings.kd / PRECISION_DECIMALS_COMMS;
                         xQueueSend(queueNewPidParams,(void*)&pidParams,0);
                     }
                 break;
@@ -120,16 +122,10 @@ void sendDynamicData(robot_dynamic_data_t dynamicData) {
 void sendLocalConfig(robot_local_configs_t localConfig) {
     localConfig.headerPackage = HEADER_PACKAGE_LOCAL_CONFIG;
 
-    if (xStreamBufferSend(xStreamBufferSender, &localConfig, sizeof(localConfig), 1) != sizeof(localConfig)) {
-        /* TODO: Manejar el caso en el que el buffer está lleno y no se pueden enviar datos */
-         ESP_LOGI("COMMS", "BUFFER DE TRANSMISION OVERFLOW");
-    }
-
-    // char SendAngleChar[50];
-    // // sprintf(SendAngleChar,">angle:%f\n>outputMotor:%f\n",status.actualAngle,status.speedL/100.0);
-    // sprintf(SendAngleChar,">angle:%f\n",status.actualAngle);
-    // printf(SendAngleChar); 
-    // if (xStreamBufferSend(xStreamBufferSender, &SendAngleChar, sizeof(SendAngleChar), 1) != pdPASS) {
+    // if (xStreamBufferSend(xStreamBufferSender, &localConfig, sizeof(localConfig), 1) != sizeof(localConfig)) {
     //     /* TODO: Manejar el caso en el que el buffer está lleno y no se pueden enviar datos */
+    //      ESP_LOGI("COMMS", "BUFFER DE TRANSMISION OVERFLOW");
     // }
+
+    xQueueSend(newLocalConfigToSend,&localConfig,0);
 }

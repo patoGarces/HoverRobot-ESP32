@@ -51,6 +51,8 @@ static void handlerEnqueueSender(void *pvParameters);
 StreamBufferHandle_t xStreamBufferReceiver;
 StreamBufferHandle_t xStreamBufferSender;
 
+extern QueueHandle_t newLocalConfigToSend;
+
 static const uint8_t spp_adv_data[23] = {
     /* Flags */
     0x02,0x01,0x06,
@@ -367,7 +369,7 @@ static void print_write_buffer(void)
     }
 }
 
-// void sendStatusToRobot(robot_dynamic_data_t newFrame) {
+//static void sendStatusToRobot(robot_dynamic_data_t newFrame) {
 
 //     // Asignar memoria para los datos a enviar
 //     uint8_t *temp = (uint8_t *)malloc(sizeof(newFrame));
@@ -389,16 +391,13 @@ static void print_write_buffer(void)
 //     }
 // }
 
-esp_err_t sendLocalSettings(robot_local_configs_t localConfig) {
-
-    if (!is_connected) return ESP_FAIL;
+static void sendLocalSettings(robot_local_configs_t localConfig) {
 
     uint8_t buffer[sizeof(robot_local_configs_t)];
     memcpy(buffer, &localConfig, sizeof(robot_local_configs_t));
 
     esp_ble_gatts_set_attr_value(settings_notify_val, sizeof(buffer), buffer);
-    esp_ble_gatts_send_indicate(spp_gatts_if, spp_conn_id, spp_handle_table[SETTINGS_IDX_CHAR_WRITE_VAL], sizeof(buffer), buffer, false);
-    return ESP_OK;      
+    esp_ble_gatts_send_indicate(spp_gatts_if, spp_conn_id, spp_handle_table[SETTINGS_IDX_CHAR_WRITE_VAL], sizeof(buffer), buffer, false);     
 }
 
 void uart_task(void *pvParameters)
@@ -737,6 +736,7 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
 static void handlerEnqueueSender(void *pvParameters){
 
     uint8_t received_data[100];
+    robot_local_configs_t newLocalConfig;
     
     while(is_connected) {
 
@@ -747,10 +747,21 @@ static void handlerEnqueueSender(void *pvParameters){
             // Verificar el tamaño del paquete antes de enviar
             if (bytes_received <= (spp_mtu_size - 3)) {
                 esp_ble_gatts_send_indicate(spp_gatts_if, spp_conn_id, spp_handle_table[SPP_IDX_SPP_DATA_NTY_VAL], bytes_received, received_data, false);
-            } else {
+            } 
+            else {
                 printf("ERROR TAMAÑO PAQUETE: %d\n", bytes_received);
             }
         }
+
+        if (xQueueReceive(newLocalConfigToSend,&newLocalConfig,0)) {
+            if (bytes_received <= (spp_mtu_size - 3)) {
+                sendLocalSettings(newLocalConfig);
+            } 
+            else {
+                printf("ERROR TAMAÑO PAQUETE: %d\n", bytes_received);
+            }
+        }
+
         vTaskDelay(50);
     }
     vTaskDelete(NULL);
@@ -800,8 +811,9 @@ void btInit(char* deviceName) {
 
     spp_task_init();
 
-    xStreamBufferSender = xStreamBufferCreate( STREAM_BUFFER_SIZE, STREAM_BUFFER_LENGTH_TRIGGER );
-    xStreamBufferReceiver = xStreamBufferCreate( STREAM_BUFFER_SIZE, STREAM_BUFFER_LENGTH_TRIGGER );
+    xStreamBufferSender = xStreamBufferCreate(STREAM_BUFFER_SIZE, STREAM_BUFFER_LENGTH_TRIGGER);
+    xStreamBufferReceiver = xStreamBufferCreate(STREAM_BUFFER_SIZE, STREAM_BUFFER_LENGTH_TRIGGER);
+    newLocalConfigToSend = xQueueCreate(10, sizeof(robot_local_configs_t));
     printf("Bluetooth iniciado exitosamente\n");
 }
 
