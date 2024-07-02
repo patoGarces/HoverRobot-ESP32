@@ -2,9 +2,12 @@
 #define __MAIN_H__
 #include "stdint.h"
 
+// PARA DETECTAR EL ESP32S3: CONFIG_IDF_TARGET_ESP32S3
+
 
 // #define HARDWARE_PROTOTYPE
-#define HARDWARE_HOVERROBOT
+// #define HARDWARE_HOVERROBOT
+#define HARDWARE_S3
 
 #define PERIOD_IMU_MS           100
 #define MPU_HANDLER_PRIORITY    5//configMAX_PRIORITIES - 1
@@ -13,12 +16,12 @@
 
 #define COMM_HANDLER_PRIORITY   configMAX_PRIORITIES - 4
 
-#if defined(HARDWARE_PROTOTYPE) && defined(HARDWARE_HOVERROBOT)
-#error Error hardware robot config
-#elif !defined(HARDWARE_PROTOTYPE) && !defined(HARDWARE_HOVERROBOT)
-#error Error hardware robot config
+// #if defined(HARDWARE_PROTOTYPE) && defined(HARDWARE_HOVERROBOT)
+// #error Error hardware robot config
+// #elif !defined(HARDWARE_PROTOTYPE) && !defined(HARDWARE_HOVERROBOT)
+// #error Error hardware robot config
 
-#elif defined(HARDWARE_PROTOTYPE)
+#if defined(HARDWARE_PROTOTYPE)
 #define DEVICE_BT_NAME          "Balancing robot prototype"
 #define PIN_LED             2
 #define PIN_OSCILO          13
@@ -54,9 +57,35 @@
 #define GPIO_MPU_SDA     32
 #define GPIO_MPU_SCL     33
 
+#elif defined(HARDWARE_S3)
+
+#define DEVICE_BT_NAME          "Balancing robot S3"
+#define PIN_LED         27
+#define PIN_OSCILO      13
+
+// Pinout CAN
+#define GPIO_CAN_TX     11 // verde
+#define GPIO_CAN_RX     48 // blanco
+#define UART_PORT_CAN   UART_NUM_2
+
+// Pinout MPU6050
+#define GPIO_MPU_INT        9      
+#define GPIO_MPU_SDA        40
+#define GPIO_MPU_SCL        41
+
+#define HALL_SENSOR_R1 GPIO_NUM_12
+#define HALL_SENSOR_R2 GPIO_NUM_10
+#define HALL_SENSOR_R3 GPIO_NUM_47
+
 #endif
 
-typedef struct{
+enum {
+    PID_ANGLE,
+    PID_POS,
+    PID_SPEED
+};
+
+typedef struct {
     int16_t motorR;
     int16_t motorL;
     uint8_t enable;

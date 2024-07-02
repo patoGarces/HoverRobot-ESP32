@@ -23,7 +23,7 @@
 
 #define CPU_STEPPER     1
 
-#define SPEED_MODE_TIMER    LEDC_HIGH_SPEED_MODE
+#define SPEED_MODE_TIMER    LEDC_LOW_SPEED_MODE
 #define TIMER_MOT_L         LEDC_TIMER_0
 #define TIMER_MOT_R         LEDC_TIMER_1
 
@@ -79,7 +79,7 @@ void motorsInit(stepper_config_t config) {
     ledc_timer_config_t timerConfig = {
         .speed_mode = SPEED_MODE_TIMER,
         .timer_num = TIMER_MOT_L,
-        .clk_cfg = LEDC_USE_REF_TICK,
+        .clk_cfg = LEDC_AUTO_CLK,
         .duty_resolution = LEDC_TIMER_4_BIT,
         .freq_hz = FREQ_MIN,
     };

@@ -3,6 +3,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include "freertos/semphr.h"
 #include "stdio.h"
 #include "math.h"
 #include "esp_log.h"
@@ -11,28 +12,33 @@
 #include "comms.h"
 #include "PID.h"
 #include "storage_flash.h"
-#include "stepper.h"
 #include "mpu6050_wrapper.h"
+
+#ifdef HARDWARE_PROTOTYPE
+    #include "stepper.h"
+#endif
+
 /* Incluyo componentes */
 #include "../components/BT_BLE/include/BT_BLE.h"
-#include "../components/CAN_COMMS/include/CAN_MCB.h"
-#include "../components/SERVO_CONTROL/include/SERVO_CONTROL.h"
 
-#include "../components/HALL_SENSOR/include/HALL_SENSOR.h"
+#if defined(HARDWARE_HOVERROBOT) || defined(HARDWARE_S3)
+    #include "../components/CAN_COMMS/include/CAN_MCB.h"
+    #include "../components/HALL_SENSOR/include/HALL_SENSOR.h"
+    // #include "../components/SERVO_CONTROL/include/SERVO_CONTROL.h"
+#endif
 
 #define GRAPH_ARDUINO_PLOTTER   false
 #define MAX_VELOCITY            1000.00
 
-
-#ifdef HARDWARE_HOVERROBOT
+#if defined(HARDWARE_HOVERROBOT) || defined(HARDWARE_S3)
     #define MAX_ANGLE_JOYSTICK          4.0
-    #define MAX_ROTATION_RATE_CONTROL   75
+    #define MAX_ROTATION_RATE_CONTROL   25//75
 #else
     #define MAX_ANGLE_JOYSTICK      8.0
     #define MAX_ROTATION_RATE_CONTROL         100
 #endif
 
-
+QueueHandle_t pruebaqueue;
 
 extern QueueSetHandle_t newAnglesQueue;                 // Recibo nuevos angulos obtenidos del MPU
 QueueSetHandle_t queueMotorControl;                     // Envio nuevos valores de salida para el control de motores
@@ -67,7 +73,7 @@ static void imuControlHandler(void *pvParameters) {
     float safetyLimitProm[5];
     uint8_t safetyLimitPromIndex = 0;
 
-    // statusRobot.statusCode = STATUS_ROBOT_ARMED;
+    statusRobot.statusCode = STATUS_ROBOT_ARMED;
 
     while(1) {
         if(xQueueReceive(newAnglesQueue,&newAngles,pdMS_TO_TICKS(10))) {
@@ -77,7 +83,7 @@ static void imuControlHandler(void *pvParameters) {
             statusRobot.yaw = newAngles.yaw;
             statusRobot.tempImu = (uint16_t)newAngles.temp * 10;
 
-            #ifdef HARDWARE_HOVERROBOT
+            #if defined(HARDWARE_HOVERROBOT) || defined(HARDWARE_S3)
                 float angleReference = newAngles.roll * -1;
             #else
                 float angleReference = newAngles.pitch;
@@ -85,19 +91,19 @@ static void imuControlHandler(void *pvParameters) {
 
             // printf("pitch: %f\troll: %f\n",newAngles.pitch,newAngles.roll);
             
-            int16_t outputPidMotors = (uint16_t)(pidCalculate(angleReference) * MAX_VELOCITY); 
+            int16_t outputPidMotors = (uint16_t)(pidCalculate(PID_ANGLE,angleReference) * MAX_VELOCITY); 
 
             // kickstart for brushless motor
-            #ifdef HARDWARE_HOVERROBOT
-            const uint8_t kickstart = 40;
-            const uint8_t deadband = 40;
-                if(outputPidMotors < deadband && outputPidMotors > 0) {
-                    outputPidMotors += kickstart;
-                }
-                else if (outputPidMotors >-deadband && outputPidMotors < 0) {
-                    outputPidMotors -= kickstart;
-                }
-            #endif
+            // #ifdef HARDWARE_HOVERROBOT
+            // const uint8_t kickstart = 40;
+            // const uint8_t deadband = 40;
+            //     if(outputPidMotors < deadband && outputPidMotors > 0) {
+            //         outputPidMotors += kickstart;
+            //     }
+            //     else if (outputPidMotors >-deadband && outputPidMotors < 0) {
+            //         outputPidMotors -= kickstart;
+            //     }
+            // #endif
 
             speedMotors.motorL = cutSpeedRange(outputPidMotors + attitudeControlMotor.motorL);
             speedMotors.motorR = cutSpeedRange(outputPidMotors + attitudeControlMotor.motorR);
@@ -108,9 +114,9 @@ static void imuControlHandler(void *pvParameters) {
             }
             float angleSafetyLimit = (safetyLimitProm[0] + safetyLimitProm[1] + safetyLimitProm[2]) / 3;
 
-            if (pidGetEnable()) { 
+            if (pidGetEnable(PID_ANGLE)) { 
                 if (((angleSafetyLimit < (statusRobot.pid.centerAngle-statusRobot.pid.safetyLimits)) || (angleSafetyLimit > (statusRobot.pid.centerAngle+statusRobot.pid.safetyLimits)))) { 
-                    pidSetDisable();
+                    pidSetDisable(PID_ANGLE);
                     speedMotors.enable = false;
                     speedMotors.motorL = 0;
                     speedMotors.motorR = 0;
@@ -120,22 +126,23 @@ static void imuControlHandler(void *pvParameters) {
             }
             else { 
                 if (((angleReference > (statusRobot.pid.centerAngle-1)) && (angleReference < (statusRobot.pid.centerAngle+1)))) { 
-                    pidSetEnable();   
+                    pidSetEnable(PID_ANGLE);   
                     speedMotors.enable = true;
                     statusRobot.statusCode = STATUS_ROBOT_STABILIZED;                                              
                 }
             }
             
-            #ifdef HARDWARE_HOVERROBOT
-                const int8_t calibratePwmOffset = 3;
-                uint16_t velMotorToServoR = (speedMotors.motorR/2) + 500 + calibratePwmOffset;
-                uint16_t velMotorToServoL = (speedMotors.motorL/2) + 500 + calibratePwmOffset;
-                pwmSetOutput(2,velMotorToServoL);
-                pwmSetOutput(3,velMotorToServoR);
+            // #ifdef HARDWARE_HOVERROBOT
+            //     const int8_t calibratePwmOffset = 3;
+            //     uint16_t velMotorToServoR = (speedMotors.motorR/2) + 500 + calibratePwmOffset;
+            //     uint16_t velMotorToServoL = (speedMotors.motorL/2) + 500 + calibratePwmOffset;
+            //     pwmSetOutput(2,velMotorToServoL);
+            //     pwmSetOutput(3,velMotorToServoR);
                 // printf("PWM OUTPUTS: L: %d R: %d\n",velMotorToServoR,velMotorToServoL);
-            #else
+            // #else
+                // printf("OUTPUTS: L: %d R: %d\n",speedMotors.motorL,speedMotors.motorR);
                 xQueueSend(queueMotorControl,&speedMotors,pdMS_TO_TICKS(1));
-            #endif
+            // #endif
             statusRobot.speedL = speedMotors.motorL;
             statusRobot.speedR = speedMotors.motorR;
             
@@ -156,33 +163,28 @@ static void attitudeControl(void *pvParameters){
             attitudeControlMotor.motorR = (newControl.axisX / 100.00) *  MAX_ROTATION_RATE_CONTROL;
             attitudeControlMotor.motorL = attitudeControlMotor.motorR * -1;
 
-            float setPoint = statusRobot.pid.centerAngle + (newControl.axisY / 100.00) * MAX_ANGLE_JOYSTICK;
+            float outputPosControl = statusRobot.pid.centerAngle + (newControl.axisY / 100.00) * MAX_ANGLE_JOYSTICK;
 
             if (!newControl.axisX && !newControl.axisY) {
-                if( pulseCount > (setPointPositionControl + 20)) {
-                    setPoint = statusRobot.pid.centerAngle - 4;
-                    printf("BUSCANDO - SP POS: %ld, actual POS: %ld\n",setPointPositionControl,pulseCount);
-                }
-                else if(pulseCount < (setPointPositionControl - 20)){
-                    setPoint = statusRobot.pid.centerAngle + 4;
-                    printf("BUSCANDO + SP POS: %ld, actual POS: %ld\n",setPointPositionControl,pulseCount);
-                }
-                else {
-                    setPoint = statusRobot.pid.centerAngle;
-                    printf("Estoy dentro de mi pos control\n");
-                }
+
+                outputPosControl = pidCalculate(PID_POS,pulseCount) * 5.00; 
+                // printf("input: %ld\tsetPoint: %ld\toutput: %f\n",pulseCount,setPointPositionControl,outputPosControl);
+                printf(">input:%ld\n>tsetPoint:%ld\n>outputAngle:%f\n",pulseCount,setPointPositionControl,outputPosControl);
 
                 if (!posControlEnable) {
                     setPointPositionControl = pulseCount;
+                    pidSetSetPoint(PID_POS,setPointPositionControl);
                     posControlEnable = true;
+                    pidSetEnable(PID_POS);
                 }
             }
             else if (posControlEnable){
                 posControlEnable = false;                   // TODO: deberia switchear aca a modo control de velocidad
+                pidSetDisable(PID_POS);
             }
 
-            statusRobot.setPoint = setPoint;
-            pidSetSetPoint(setPoint);
+            statusRobot.setPoint = outputPosControl;
+            pidSetSetPoint(PID_ANGLE,outputPosControl);     // La salida del control de posicion alimenta al PID de angulo
         } 
 
         vTaskDelay(pdMS_TO_TICKS(50));
@@ -197,11 +199,11 @@ static void commsManager(void *pvParameters) {
 
     statusRobot.statusCode = STATUS_ROBOT_INIT;
 
-    while (1) {
+    while (true) {
         
         if(xQueueReceive(queueNewPidParams,&newPidParams,0)) {
-            pidSetConstants(newPidParams.kp,newPidParams.ki,newPidParams.kd);
-            pidSetSetPoint(newPidParams.centerAngle);
+            pidSetConstants(PID_ANGLE,newPidParams.kp,newPidParams.ki,newPidParams.kd);
+            pidSetSetPoint(PID_ANGLE,newPidParams.centerAngle);
             storageWritePidParams(newPidParams);            
 
             statusRobot.pid = newPidParams;
@@ -316,7 +318,7 @@ static void ledHandler(void *pvParameters) {
         // xQueueSend(queueMotorControl,&speedMotors,pdMS_TO_TICKS(1));
         // testHardwareVibration();
 
-        printf("SP Pos: %ld\n",setPointPositionControl);
+        // printf("SP Pos: %ld\n",setPointPositionControl);
     }
 }
 
@@ -335,7 +337,10 @@ void app_main() {
     queueNewCommand = xQueueCreate(1, sizeof(command_app_raw_t));
     queueMotorControl = xQueueCreate(1,sizeof(output_motors_t));
 
+    pruebaqueue = xQueueCreate(100,100); // TODO: borrar
+
     storageInit();
+
     readParams = storageReadPidParams();
     statusRobot.pid = readParams;
     statusRobot.setPoint = readParams.centerAngle;
@@ -352,40 +357,49 @@ void app_main() {
     };
     mpu6050_initialize(&configMpu);
 
-
-    hall_sensors_config_t configHallSensors = {
-        .gpioSensorU = GPIO_NUM_21,
-        .gpioSensorV = GPIO_NUM_22,
-        .gpioSensorW = GPIO_NUM_23
-    };
-
-    hallSensorInit(configHallSensors);
-
-    pid_init_t pidConfig = {
-        .kp = readParams.kp,
-        .ki = readParams.ki,
-        .kd = readParams.kd,
-        .initSetPoint = readParams.centerAngle,
-        .sampleTimeInMs = PERIOD_IMU_MS,
+    pid_init_t pidConfig[CANT_PIDS] = {
+        {
+            .kp = readParams.kp,
+            .ki = readParams.ki,
+            .kd = readParams.kd,
+            .initSetPoint = readParams.centerAngle,
+            .sampleTimeInMs = PERIOD_IMU_MS,
+        },
+        {
+            .kp = 3,
+            .ki = 1,
+            .kd = 1,
+            .initSetPoint = 0,
+            .sampleTimeInMs = PERIOD_IMU_MS, 
+        }
     };
     pidInit(pidConfig);
 
-    #ifdef HARDWARE_HOVERROBOT
-        // config_init_mcb_t configMcb = {
-        //     .numUart = UART_PORT_CAN,
-        //     .txPin = GPIO_CAN_TX,
-        //     .rxPin = GPIO_CAN_RX
-        // };
-        // mcbInit(&configMcb);
-        pwm_servo_init_t configServos = {
-            .hsPwm1Gpio = -1,
-            .hsPwm2Gpio = -1,
-            .lsPwm1Gpio = GPIO_PWM_R,
-            .lsPwm2Gpio = GPIO_PWM_L,
-            .lsPwm3Gpio = -1,
-            .lsPwm4Gpio = -1,
+    #if defined(HARDWARE_HOVERROBOT) || defined(HARDWARE_S3)
+
+        hall_sensors_config_t configHallSensors = {
+            .gpioSensorU = HALL_SENSOR_R1,
+            .gpioSensorV = HALL_SENSOR_R2,
+            .gpioSensorW = HALL_SENSOR_R3,
         };
-        pwmServoInit(configServos);
+
+        hallSensorInit(configHallSensors);
+
+        config_init_mcb_t configMcb = {
+            .numUart = UART_PORT_CAN,
+            .txPin = GPIO_CAN_TX,
+            .rxPin = GPIO_CAN_RX
+        };
+        mcbInit(&configMcb);
+        // pwm_servo_init_t configServos = {
+        //     .hsPwm1Gpio = -1,
+        //     .hsPwm2Gpio = -1,
+        //     .lsPwm1Gpio = GPIO_PWM_R,
+        //     .lsPwm2Gpio = GPIO_PWM_L,
+        //     .lsPwm3Gpio = -1,
+        //     .lsPwm4Gpio = -1,
+        // };
+        // pwmServoInit(configServos);
     #endif
 
     #ifdef HARDWARE_PROTOTYPE
@@ -401,8 +415,8 @@ void app_main() {
         setMicroSteps(true);
     #endif
 
-    xTaskCreatePinnedToCore(imuControlHandler,"Imu Control Task",4096,NULL,IMU_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);
-    xTaskCreate(attitudeControl,"attitude control Task",2048,NULL,4,NULL);
+    xTaskCreatePinnedToCore(imuControlHandler,"Imu Control",4096,NULL,IMU_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);
+    xTaskCreate(attitudeControl,"attitude control",4096,NULL,4,NULL);
     xTaskCreate(commsManager,"communication manager",4096,NULL,COMM_HANDLER_PRIORITY,NULL);
     xTaskCreate(ledHandler,"Led handler",2048,NULL,2,NULL);
 }

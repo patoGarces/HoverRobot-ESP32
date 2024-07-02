@@ -78,15 +78,15 @@ void mpu6050Handler(void*){
 				.temp = ((mpu.getTemperature() / 340.0f) + 36.53f)
 			};
 
-			// printfW("pitch: %f\n",newData.pitch);
+			// printf("pitch: %f\n",newData.pitch);
 
-			if (contMeasure < 2500) {						// wait to stabilize measuments
-				contMeasure++;
-			}
-			else {
+			// if (contMeasure < 2500) {						// wait to stabilize measuments
+			// 	contMeasure++;
+			// }
+			// else {
 				// printf("pitch: %f\n",newData.pitch);
             	xQueueSend(newAnglesQueue,(void *) &newData, 1);
-			}
+			// }
 	    }
 
 	    //Best result is to match with DMP refresh rate
@@ -111,7 +111,7 @@ void mpu6050_initialize(mpu6050_init_t *config) {
 	conf.master.clk_speed = 400000;
 	conf.clk_flags = I2C_SCLK_SRC_FLAG_FOR_NOMAL;
 	ESP_ERROR_CHECK(i2c_param_config(I2C_NUM_0, &conf));
-	ESP_ERROR_CHECK(i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0));
+	ESP_ERROR_CHECK(i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, ESP_INTR_FLAG_IRAM));
 
     xTaskCreate(mpu6050Handler,"mpu6050_handler_wrapper",8096,NULL,config->priorityTask,&readHandler);
 }

@@ -18,6 +18,9 @@ extern QueueHandle_t queueNewCommand;
 
 QueueHandle_t newLocalConfigToSend;
 
+
+extern QueueHandle_t pruebaqueue;
+
 TaskHandle_t commsHandle;
 
 static void communicationHandler(void * param);
@@ -105,10 +108,12 @@ void sendDynamicData(robot_dynamic_data_t dynamicData) {
 
     dynamicData.headerPackage = HEADER_PACKAGE_STATUS;
 
-    if (xStreamBufferSend(xStreamBufferSender, &dynamicData, sizeof(dynamicData), 1) != sizeof(dynamicData)) {
+    xQueueSend(pruebaqueue,&dynamicData,10);
+
+    // if (xStreamBufferSend(xStreamBufferSender, &dynamicData, sizeof(dynamicData), 1) != sizeof(dynamicData)) {
         /* TODO: Manejar el caso en el que el buffer está lleno y no se pueden enviar datos */
-         ESP_LOGI("COMMS", "BUFFER DE TRANSMISION OVERFLOW");
-    }
+        //  ESP_LOGI("COMMS", "BUFFER DE TRANSMISION OVERFLOW");
+    // }
 
     // char SendAngleChar[50];
     // // sprintf(SendAngleChar,">angle:%f\n>outputMotor:%f\n",status.actualAngle,status.speedL/100.0);

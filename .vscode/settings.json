@@ -51,8 +51,9 @@
         "esp_bit_defs.h": "c",
         "servo_control.h": "c",
         "bt_ble.h": "c",
-        "hall_sensor.h": "c"
+        "hall_sensor.h": "c",
+        "initializer_list": "c"
     },
-    "idf.portWin": "COM8",
+    "idf.portWin": "COM7",
     "idf.adapterTargetName": "esp32"
 }

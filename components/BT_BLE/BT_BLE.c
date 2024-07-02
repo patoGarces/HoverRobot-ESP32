@@ -53,6 +53,8 @@ StreamBufferHandle_t xStreamBufferSender;
 
 extern QueueHandle_t newLocalConfigToSend;
 
+extern QueueHandle_t pruebaqueue; // TODO: borrar
+
 static const uint8_t spp_adv_data[23] = {
     /* Flags */
     0x02,0x01,0x06,
@@ -408,7 +410,7 @@ void uart_task(void *pvParameters)
 
     for (;;) {
         //Waiting for UART event.
-        if (xQueueReceive(spp_uart_queue, (void * )&event, (portTickType)portMAX_DELAY)) {
+        if (xQueueReceive(spp_uart_queue, (void * )&event, pdMS_TO_TICKS(10))) {// (portTickType)portMAX_DELAY)) {
             switch (event.type) {
             //Event of UART receving data
             case UART_DATA:
@@ -427,7 +429,7 @@ void uart_task(void *pvParameters)
                     }
 
 
-                robot_local_configs_t mockData = {
+                    robot_local_configs_t mockData = {
                         .headerPackage = HEADER_PACKAGE_LOCAL_CONFIG,
                         .kp = 52,
                         .ki = 125,
@@ -534,7 +536,7 @@ void spp_heartbeat_task(void * arg)
 
 static void spp_task_init(void)
 {
-    spp_uart_init();
+    // spp_uart_init();
 
 #ifdef SUPPORT_HEARTBEAT
     cmd_heartbeat_queue = xQueueCreate(10, sizeof(uint32_t));
@@ -737,12 +739,16 @@ static void handlerEnqueueSender(void *pvParameters){
 
     uint8_t received_data[100];
     robot_local_configs_t newLocalConfig;
+
+    robot_dynamic_data_t newDynamicData;
     
     while(is_connected) {
 
-        BaseType_t bytes_received = xStreamBufferReceive(xStreamBufferSender, (uint8_t *)received_data, sizeof(received_data) - 1, pdMS_TO_TICKS(50));
+        BaseType_t bytes_received = xStreamBufferReceive(xStreamBufferSender, (uint8_t *)received_data, sizeof(received_data) - 1, pdMS_TO_TICKS(0));
 
         if (bytes_received > 0 && isBtConnected()) {
+
+            printf("Bytes stream recibidos: %d\n",bytes_received);
 
             // Verificar el tamaño del paquete antes de enviar
             if (bytes_received <= (spp_mtu_size - 3)) {
@@ -760,6 +766,12 @@ static void handlerEnqueueSender(void *pvParameters){
             else {
                 printf("ERROR TAMAÑO PAQUETE: %d\n", bytes_received);
             }
+        }
+
+        if(xQueueReceive(pruebaqueue,&newDynamicData,0)) {
+            printf("New DynamixData\n");
+            esp_ble_gatts_send_indicate(spp_gatts_if, spp_conn_id, spp_handle_table[SPP_IDX_SPP_DATA_NTY_VAL], 18, &newDynamicData, false);
+            
         }
 
         vTaskDelay(50);
