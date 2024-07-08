@@ -24,7 +24,7 @@
 #if defined(HARDWARE_PROTOTYPE)
 #define DEVICE_BT_NAME          "Balancing robot prototype"
 #define PIN_LED             2
-#define PIN_OSCILO          13
+#define PIN_OSCILO          27//26
 
 // Pinout MPU6050
 #define GPIO_MPU_INT        31      
@@ -49,9 +49,9 @@
 #define GPIO_CAN_RX     25
 #define UART_PORT_CAN   UART_NUM_2
 
-// Pinout PWM (provisorio)
-#define GPIO_PWM_R      12
-#define GPIO_PWM_L      14
+// // Pinout PWM (provisorio)
+// #define GPIO_PWM_R      12
+// #define GPIO_PWM_L      14
 
 #define GPIO_MPU_INT     35
 #define GPIO_MPU_SDA     32

@@ -30,7 +30,7 @@
 #define CHANNEL_MOT_L       LEDC_CHANNEL_0
 #define CHANNEL_MOT_R       LEDC_CHANNEL_1
 
-extern QueueSetHandle_t queueMotorControl; 
+extern QueueHandle_t queueMotorControl; 
 static stepper_config_t configInit;
 
 static void setVelMotors(int16_t speedL,int16_t speedR);

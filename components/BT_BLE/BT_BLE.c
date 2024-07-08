@@ -769,7 +769,7 @@ static void handlerEnqueueSender(void *pvParameters){
         }
 
         if(xQueueReceive(pruebaqueue,&newDynamicData,0)) {
-            printf("New DynamixData\n");
+            // printf("New DynamixData\n");
             esp_ble_gatts_send_indicate(spp_gatts_if, spp_conn_id, spp_handle_table[SPP_IDX_SPP_DATA_NTY_VAL], 18, &newDynamicData, false);
             
         }

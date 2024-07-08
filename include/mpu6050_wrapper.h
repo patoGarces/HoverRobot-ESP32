@@ -12,6 +12,7 @@ typedef struct {
     gpio_num_t sdaGpio;
     gpio_num_t intGpio;
     uint8_t priorityTask;
+    uint8_t core;
 } mpu6050_init_t;
 
 typedef struct {

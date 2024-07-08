@@ -10,25 +10,23 @@
 extern "C" {
 #endif
 
-QueueSetHandle_t newAnglesQueue;
+QueueHandle_t newAnglesQueue;
 
 TaskHandle_t readHandler;
 mpu6050_init_t MpuConfigInit;
 uint8_t enableCalibrate = false;
 
 void mpu6050Handler(void*){
-	// quaternion_wrapper_t q;             // [w, x, y, z]         quaternion container
-	// vector_float_wrapper_t gravity;     // [x, y, z]            gravity vector
-	Quaternion q;           // [w, x, y, z]         quaternion container
-	VectorFloat gravity;    // [x, y, z]            gravity vector
+	// quaternion_wrapper_t q;     		// [w, x, y, z]         quaternion container
+	// vector_float_wrapper_t gravity;	// [x, y, z]            gravity vector
+	Quaternion q;         				// [w, x, y, z]         quaternion container
+	VectorFloat gravity;    			// [x, y, z]            gravity vector
 	float ypr[3];                       // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
 	uint16_t packetSize = 42;           // expected DMP packet size (default is 42 bytes)
 	uint16_t fifoCount;                 // count of all bytes currently in FIFO
 	uint8_t fifoBuffer[64];             // FIFO storage buffer
 	uint8_t mpuIntStatus;               // holds actual interrupt status byte from MPU
 	uint16_t contMeasure = 0;
-
-    newAnglesQueue = xQueueCreate(1,sizeof(vector_queue_t));
 
 	MPU6050 mpu = MPU6050();
 	mpu.initialize();
@@ -45,8 +43,6 @@ void mpu6050Handler(void*){
     // mpu.CalibrateGyro(6);
 		enableCalibrate = false;
 	}
-
-    
 
 	mpu.setDMPEnabled(true);
 
@@ -69,7 +65,6 @@ void mpu6050Handler(void*){
 	 		mpu.dmpGetQuaternion(&q, fifoBuffer);
 			mpu.dmpGetGravity(&gravity, &q);
 			mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-
 
 			vector_queue_t newData = {
 				.yaw = ((ypr[0] * 180) / (float)M_PI),
@@ -113,7 +108,7 @@ void mpu6050_initialize(mpu6050_init_t *config) {
 	ESP_ERROR_CHECK(i2c_param_config(I2C_NUM_0, &conf));
 	ESP_ERROR_CHECK(i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, ESP_INTR_FLAG_IRAM));
 
-    xTaskCreate(mpu6050Handler,"mpu6050_handler_wrapper",8096,NULL,config->priorityTask,&readHandler);
+    xTaskCreatePinnedToCore(mpu6050Handler,"mpu6050_handler_wrapper",8096,NULL,config->priorityTask,&readHandler,config->core);
 }
 
 void mpu6050_recalibrate() {
