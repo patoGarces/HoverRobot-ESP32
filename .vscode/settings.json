@@ -54,8 +54,9 @@
         "hall_sensor.h": "c",
         "initializer_list": "c",
         "random": "c",
-        "type_traits": "c"
+        "type_traits": "c",
+        "iterator": "c"
     },
-    "idf.portWin": "COM9",
+    "idf.portWin": "COM7",
     "idf.adapterTargetName": "esp32"
 }

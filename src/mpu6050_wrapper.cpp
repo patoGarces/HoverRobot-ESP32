@@ -10,7 +10,7 @@
 extern "C" {
 #endif
 
-QueueHandle_t newAnglesQueue;
+QueueHandle_t mpu6050QueueHandler;
 
 TaskHandle_t readHandler;
 mpu6050_init_t MpuConfigInit;
@@ -80,7 +80,7 @@ void mpu6050Handler(void*){
 			// }
 			// else {
 				// printf("pitch: %f\n",newData.pitch);
-            	xQueueSend(newAnglesQueue,(void *) &newData, 1);
+            	xQueueSend(mpu6050QueueHandler,(void *) &newData, 1);
 			// }
 	    }
 

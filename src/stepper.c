@@ -30,7 +30,7 @@
 #define CHANNEL_MOT_L       LEDC_CHANNEL_0
 #define CHANNEL_MOT_R       LEDC_CHANNEL_1
 
-extern QueueHandle_t queueMotorControl; 
+extern QueueHandle_t motorControlQueueHandler; 
 static stepper_config_t configInit;
 
 static void setVelMotors(int16_t speedL,int16_t speedR);
@@ -40,7 +40,7 @@ static void controlHandler(void *pvParameters) {
 
     output_motors_t newVel;
     while(true) {
-        if (xQueueReceive(queueMotorControl,&newVel,pdMS_TO_TICKS(1))) {
+        if (xQueueReceive(motorControlQueueHandler,&newVel,pdMS_TO_TICKS(1))) {
             if (newVel.enable) {
                 setVelMotors(newVel.motorL,newVel.motorR);
             }

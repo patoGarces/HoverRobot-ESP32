@@ -20,6 +20,8 @@ esp_err_t pidInit(pid_init_t initParams[CANT_PIDS]) {
 }
 
 void pidSetEnable(uint8_t numPid) {
+    pidControl[numPid].iTerm = 0.00;
+    pidControl[numPid].lastInput = 0.00;
     pidControl[numPid].enablePID = true;
 }
 
@@ -58,7 +60,7 @@ float pidCalculate(uint8_t numPid,float input) {
         
         float normalizeInput = normalize(input);
         float error = pidControl[numPid].setPoint - normalizeInput;  													  // Error: diferencia entre el valor seteado y el de entrada
-
+        
         pidControl[numPid].iTerm += pidControl[numPid].sampleTimeInSec * pidControl[numPid].ki * error;                                // calculo I: acumulo error multiplicado por ki contemplando el tiempo transcurrido desd el anterior
         float dTerm = ((normalizeInput - pidControl[numPid].lastInput) * pidControl[numPid].kd) / pidControl[numPid].sampleTimeInSec;  // Calculo D: resto la entrada anterior a la actual
 

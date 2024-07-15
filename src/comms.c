@@ -7,14 +7,12 @@
 #include "storage_flash.h"
 #include <string.h>
 
-#define COMMS_CORE  0
-
 extern StreamBufferHandle_t xStreamBufferReceiver;
 extern StreamBufferHandle_t xStreamBufferSender;
 
-extern QueueHandle_t queueNewPidParams;
-extern QueueHandle_t queueReceiveControl;
-extern QueueHandle_t queueNewCommand;
+extern QueueHandle_t newPidParamsQueueHandler;
+extern QueueHandle_t receiveControlQueueHandler;
+extern QueueHandle_t newCommandQueueHandler;
 
 QueueHandle_t newLocalConfigToSend;
 
@@ -26,7 +24,7 @@ TaskHandle_t commsHandle;
 static void communicationHandler(void * param);
 
 void spp_wr_task_start_up(void){
-    xTaskCreatePinnedToCore(communicationHandler, "communicationHandler", 4096, NULL, 10, &commsHandle,COMMS_CORE);
+    xTaskCreatePinnedToCore(communicationHandler, "communicationHandler", 4096, NULL, 10, &commsHandle,BLE_COMMS_HANDLER_CORE);
 }
 
 void spp_wr_task_shut_down(void){
@@ -64,7 +62,7 @@ void communicationHandler(void * param) {
                         pidParams.kp = newPidSettings.kp / PRECISION_DECIMALS_COMMS;
                         pidParams.ki = newPidSettings.ki / PRECISION_DECIMALS_COMMS;
                         pidParams.kd = newPidSettings.kd / PRECISION_DECIMALS_COMMS;
-                        xQueueSend(queueNewPidParams,(void*)&pidParams,0);
+                        xQueueSend(newPidParamsQueueHandler,(void*)&pidParams,0);
                     }
                 break;
 
@@ -73,7 +71,7 @@ void communicationHandler(void * param) {
                     memcpy(&newControlVal,received_data,sizeof(newControlVal));//bytes_received);
                     contTimeout = 0;
                     // printf("NewControl recibido!\n");
-                    xQueueSend(queueReceiveControl,(void*)&newControlVal,0);
+                    xQueueSend(receiveControlQueueHandler,(void*)&newControlVal,0);
                          
                     // }
                     // else {
@@ -85,7 +83,7 @@ void communicationHandler(void * param) {
                 case HEADER_PACKAGE_COMMAND:
                     if (bytes_received == sizeof(newCommand)) { 
                         memcpy(&newCommand,received_data,bytes_received); 
-                        xQueueSend(queueNewCommand,(void*)&newCommand,0); 
+                        xQueueSend(newCommandQueueHandler,(void*)&newCommand,0); 
                     }
                 break;
                 default:
@@ -98,7 +96,7 @@ void communicationHandler(void * param) {
         if (contTimeout > TIMEOUT_COMMS) {
             newControlVal.axisX = 0;
             newControlVal.axisY = 0;
-            xQueueSend(queueReceiveControl,(void*)&newControlVal,0);
+            xQueueSend(receiveControlQueueHandler,(void*)&newControlVal,0);
         }
     }
     vTaskDelete(NULL);

@@ -6,20 +6,22 @@
 
 
 // #define HARDWARE_PROTOTYPE
-// #define HARDWARE_HOVERROBOT
 #define HARDWARE_S3
 
 #define PERIOD_IMU_MS           100
 #define MPU_HANDLER_PRIORITY    5//configMAX_PRIORITIES - 1
 #define IMU_HANDLER_PRIORITY    configMAX_PRIORITIES - 2
-#define IMU_HANDLER_CORE        1
+
+#define BLE_COMMS_HANDLER_CORE  PRO_CPU_NUM     // core 0
+#define IMU_HANDLER_CORE        APP_CPU_NUM     // core 1
 
 #define COMM_HANDLER_PRIORITY   configMAX_PRIORITIES - 4
 
-// #if defined(HARDWARE_PROTOTYPE) && defined(HARDWARE_HOVERROBOT)
-// #error Error hardware robot config
-// #elif !defined(HARDWARE_PROTOTYPE) && !defined(HARDWARE_HOVERROBOT)
-// #error Error hardware robot config
+#if defined(HARDWARE_PROTOTYPE) && defined(HARDWARE_S3)
+#error Error hardware robot config
+#elif !defined(HARDWARE_PROTOTYPE) && !defined(HARDWARE_S3)
+#error Error hardware robot config
+#endif
 
 #if defined(HARDWARE_PROTOTYPE)
 #define DEVICE_BT_NAME          "Balancing robot prototype"
@@ -38,44 +40,21 @@
 #define GPIO_MOT_ENABLE     14
 #define GPIO_MOT_MICRO_STEP 12
 
-#elif defined(HARDWARE_HOVERROBOT)
-
-#define DEVICE_BT_NAME          "Balancing robot"
-#define PIN_LED         27
-#define PIN_OSCILO      13
-
-// Pinout CAN
-#define GPIO_CAN_TX     26
-#define GPIO_CAN_RX     25
-#define UART_PORT_CAN   UART_NUM_2
-
-// // Pinout PWM (provisorio)
-// #define GPIO_PWM_R      12
-// #define GPIO_PWM_L      14
-
-#define GPIO_MPU_INT     35
-#define GPIO_MPU_SDA     32
-#define GPIO_MPU_SCL     33
-
 #elif defined(HARDWARE_S3)
 
 #define DEVICE_BT_NAME          "Balancing robot S3"
 #define PIN_LED         27
-#define PIN_OSCILO      13
+#define PIN_OSCILO      3
 
 // Pinout CAN
-#define GPIO_CAN_TX     11 // verde
-#define GPIO_CAN_RX     48 // blanco
+#define GPIO_CAN_TX     4
+#define GPIO_CAN_RX     5
 #define UART_PORT_CAN   UART_NUM_2
 
 // Pinout MPU6050
 #define GPIO_MPU_INT        9      
-#define GPIO_MPU_SDA        40
-#define GPIO_MPU_SCL        41
-
-#define HALL_SENSOR_R1 GPIO_NUM_12
-#define HALL_SENSOR_R2 GPIO_NUM_10
-#define HALL_SENSOR_R3 GPIO_NUM_47
+#define GPIO_MPU_SDA        18
+#define GPIO_MPU_SCL        17
 
 #endif
 
@@ -83,6 +62,12 @@ enum {
     PID_ANGLE,
     PID_POS,
     PID_SPEED
+};
+
+enum {
+    ATT_MODE_ATTI,
+    ATT_MODE_POS_CONTROL,
+    ATT_MODE_VEL_CONTROL,
 };
 
 typedef struct {

@@ -65,7 +65,6 @@ enum {
  * @brief Esta estructura de datos es la que se envia a la app android - LEGACY
  */
 typedef struct {
-    uint16_t headerPackage;
     uint16_t batVoltage;
     uint16_t batPercent;
     uint16_t batTemp;
@@ -76,11 +75,14 @@ typedef struct {
     float    pitch;
     float    roll;
     float    yaw;
-    pid_params_t pid;
-    float    setPoint;
+    int16_t  speedMeasR;
+    int16_t  speedMeasL;
+    float    posInMetersR;
+    float    posInMetersL;
+    pid_params_t pidConfigAngle;
+    float    setPointAngle;
     uint16_t ordenCode;
     uint16_t statusCode;
-    uint16_t checksum;
 } status_robot_t;
 
 /**
