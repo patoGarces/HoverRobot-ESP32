@@ -84,4 +84,32 @@ typedef struct{
     float safetyLimits;
 } pid_params_t;
 
+
+
+/**
+ * @brief Esta estructura de datos generica del robot
+ */
+typedef struct {
+    uint16_t batVoltage;
+    uint16_t batPercent;
+    uint16_t batTemp;
+    uint16_t tempImu;
+    uint16_t tempEscs;
+    int16_t  speedR;
+    int16_t  speedL;
+    float    pitch;
+    float    roll;
+    float    yaw;
+    int16_t  speedMeasR;
+    int16_t  speedMeasL;
+    float    posInMetersR;
+    float    posInMetersL;
+    float    distanceInCms;
+    int16_t  axisJoystickX;
+    int16_t  axisJoystickY;
+    pid_params_t pidConfigAngle;
+    float    setPointAngle;
+    uint16_t statusCode;
+} status_robot_t;
+
 #endif

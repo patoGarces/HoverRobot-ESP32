@@ -70,6 +70,8 @@ float pidCalculate(uint8_t numPid,float input) {
         /*Suma de errores*/
         float output = (pidControl[numPid].kp * error) + pidControl[numPid].iTerm - dTerm;  													// opero con los 3 parametros para obtener salida, el D se resta para evitar la kick derivate
 
+        // printf(">pidIn:%f\n>normPid:%f\n",input,normalizeInput);
+
         pidControl[numPid].lastInput = normalizeInput;
         return cutNormalizeLimits(output);
 }

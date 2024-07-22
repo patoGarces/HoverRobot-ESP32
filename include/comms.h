@@ -62,30 +62,6 @@ enum {
 } command_app_raw_t;
 
 /**
- * @brief Esta estructura de datos es la que se envia a la app android - LEGACY
- */
-typedef struct {
-    uint16_t batVoltage;
-    uint16_t batPercent;
-    uint16_t batTemp;
-    uint16_t tempImu;
-    uint16_t tempEscs;
-    int16_t  speedR;
-    int16_t  speedL;
-    float    pitch;
-    float    roll;
-    float    yaw;
-    int16_t  speedMeasR;
-    int16_t  speedMeasL;
-    float    posInMetersR;
-    float    posInMetersL;
-    pid_params_t pidConfigAngle;
-    float    setPointAngle;
-    uint16_t ordenCode;
-    uint16_t statusCode;
-} status_robot_t;
-
-/**
  * @brief Esta estructura de datos es la que se envia a la app android
  */
 typedef struct {
