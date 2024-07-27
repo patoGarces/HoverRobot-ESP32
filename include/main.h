@@ -12,7 +12,7 @@
 #define MPU_HANDLER_PRIORITY    5//configMAX_PRIORITIES - 1
 #define IMU_HANDLER_PRIORITY    configMAX_PRIORITIES - 2
 
-#define BLE_COMMS_HANDLER_CORE  PRO_CPU_NUM     // core 0
+#define COMMS_HANDLER_CORE      PRO_CPU_NUM     // core 0
 #define IMU_HANDLER_CORE        APP_CPU_NUM     // core 1
 
 #define COMM_HANDLER_PRIORITY   configMAX_PRIORITIES - 4

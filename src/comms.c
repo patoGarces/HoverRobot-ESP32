@@ -10,21 +10,17 @@
 extern StreamBufferHandle_t xStreamBufferReceiver;
 extern StreamBufferHandle_t xStreamBufferSender;
 
+// queues de recepcion externa
 extern QueueHandle_t newPidParamsQueueHandler;
 extern QueueHandle_t receiveControlQueueHandler;
 extern QueueHandle_t newCommandQueueHandler;
-
-QueueHandle_t newLocalConfigToSend;
-
-
-extern QueueHandle_t pruebaqueue;
 
 TaskHandle_t commsHandle;
 
 static void communicationHandler(void * param);
 
 void spp_wr_task_start_up(void){
-    xTaskCreatePinnedToCore(communicationHandler, "communicationHandler", 4096, NULL, 10, &commsHandle,BLE_COMMS_HANDLER_CORE);
+    xTaskCreatePinnedToCore(communicationHandler, "communicationHandler", 4096, NULL, 10, &commsHandle,COMMS_HANDLER_CORE);
 }
 
 void spp_wr_task_shut_down(void){
@@ -106,12 +102,10 @@ void sendDynamicData(robot_dynamic_data_t dynamicData) {
 
     dynamicData.headerPackage = HEADER_PACKAGE_STATUS;
 
-    xQueueSend(pruebaqueue,&dynamicData,10);
-
-    // if (xStreamBufferSend(xStreamBufferSender, &dynamicData, sizeof(dynamicData), 1) != sizeof(dynamicData)) {
+    if (xStreamBufferSend(xStreamBufferSender, &dynamicData, sizeof(dynamicData), 1) != sizeof(dynamicData)) {
         /* TODO: Manejar el caso en el que el buffer está lleno y no se pueden enviar datos */
-        //  ESP_LOGI("COMMS", "BUFFER DE TRANSMISION OVERFLOW");
-    // }
+        ESP_LOGI("COMMS", "BUFFER DE TRANSMISION OVERFLOW");
+    }
 
     // char SendAngleChar[50];
     // // sprintf(SendAngleChar,">angle:%f\n>outputMotor:%f\n",status.actualAngle,status.speedL/100.0);
@@ -125,10 +119,8 @@ void sendDynamicData(robot_dynamic_data_t dynamicData) {
 void sendLocalConfig(robot_local_configs_t localConfig) {
     localConfig.headerPackage = HEADER_PACKAGE_LOCAL_CONFIG;
 
-    // if (xStreamBufferSend(xStreamBufferSender, &localConfig, sizeof(localConfig), 1) != sizeof(localConfig)) {
-    //     /* TODO: Manejar el caso en el que el buffer está lleno y no se pueden enviar datos */
-    //      ESP_LOGI("COMMS", "BUFFER DE TRANSMISION OVERFLOW");
-    // }
-
-    xQueueSend(newLocalConfigToSend,&localConfig,0);
+    if (xStreamBufferSend(xStreamBufferSender, &localConfig, sizeof(localConfig), 1) != sizeof(localConfig)) {
+        /* TODO: Manejar el caso en el que el buffer está lleno y no se pueden enviar datos */
+         ESP_LOGI("COMMS", "BUFFER DE TRANSMISION OVERFLOW");
+    }
 }

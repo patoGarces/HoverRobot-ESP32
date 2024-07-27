@@ -13,7 +13,7 @@
 
 #define HEADER_PACKAGE_LOCAL_CONFIG     0xAB05          // key que indica que el paquete a enviar es una setting local
 
-#define PRECISION_DECIMALS_COMMS    100.00                 // Precision al convertir la data cruda del BLE a float, en este caso 100 = 0.01
+#define PRECISION_DECIMALS_COMMS    100.00              // Precision al convertir la data cruda del BLE a float, en este caso 100 = 0.01
 
 enum CommandsToRobot {
     COMMAND_CALIBRATE_IMU,
@@ -78,7 +78,7 @@ typedef struct {
 
 
 /**
- * @brief Estructura de datos enviada a la app, contiene settings locales y c
+ * @brief Estructura de datos enviada a la app, contiene settings locales
  */
 typedef struct {
     uint16_t headerPackage;

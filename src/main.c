@@ -19,7 +19,8 @@
 #endif
 
 /* Incluyo componentes */
-#include "../components/BT_BLE/include/BT_BLE.h"
+// #include "../components/BT_BLE/include/BT_BLE.h"
+#include "../components/TCP_CLIENT/include/TCP_CLIENT.h"
 
 #if defined(HARDWARE_S3)
     #include "../components/CAN_COMMS/include/CAN_MCB.h"
@@ -35,8 +36,6 @@
     #define MAX_ANGLE_JOYSTICK      8.0
     #define MAX_ROTATION_RATE_CONTROL         100
 #endif
-
-QueueHandle_t pruebaqueue;
 
 extern QueueHandle_t mpu6050QueueHandler;                   // Recibo nuevos angulos obtenidos del MPU
 QueueHandle_t motorControlQueueHandler;                     // Envio nuevos valores de salida para el control de motores
@@ -206,7 +205,7 @@ static void attitudeControl(void *pvParameters){
         statusRobot.setPointAngle = statusRobot.pidConfigAngle.centerAngle + outputPosControl; // TODO: probar NO contemplar el center angle en position control
 
         // PID POS
-        printf(">inPos:%f\n>spPos:%f\n>spPos2:%f\n>outPos:%f\n",statusRobot.distanceInCms,attitudeControlStat.setPointPos,pidGetSetPoint(PID_POS)*100,outputPosControl);
+        // printf(">inPos:%f\n>spPos:%f\n>spPos2:%f\n>outPos:%f\n",statusRobot.distanceInCms,attitudeControlStat.setPointPos,pidGetSetPoint(PID_POS)*100,outputPosControl);
         // PID ANGLE
         // printf(">inAngle:%f\n>spAngle:%f\n>outAngle:%d\n",statusRobot.pitch,statusRobot.setPointAngle,statusRobot.speedL);
 
@@ -233,7 +232,7 @@ static void commsManager(void *pvParameters) {
     uint8_t toggle = false;
     const char *TAG = "commsManager";
 
-    while (true) {
+    while(true) {
 
         if (xQueueReceive(receiveControlQueueHandler,&newControl,0)) {
             statusRobot.axisJoystickX = newControl.axisX;
@@ -273,11 +272,11 @@ static void commsManager(void *pvParameters) {
             // statusRobot.setPoint; 
         }
 
-        if (isBtConnected()) {
+        if (isTcpClientConnected()) {           // TODO: habilitar por TCP
 
             if (!lastStateIsConnected) {
                 robot_local_configs_t newConfig = {
-                    .kp = statusRobot.pidConfigAngle.kd * PRECISION_DECIMALS_COMMS,
+                    .kp = statusRobot.pidConfigAngle.kp * PRECISION_DECIMALS_COMMS,
                     .ki = statusRobot.pidConfigAngle.ki * PRECISION_DECIMALS_COMMS,
                     .kd = statusRobot.pidConfigAngle.kd * PRECISION_DECIMALS_COMMS,
                     .centerAngle = statusRobot.pidConfigAngle.centerAngle * PRECISION_DECIMALS_COMMS,
@@ -288,14 +287,14 @@ static void commsManager(void *pvParameters) {
             }
 
             robot_dynamic_data_t newData = {
-                .speedR = statusRobot.speedR,
+                .speedR = 0x0105,//statusRobot.speedR,
                 .speedL = statusRobot.speedL,
-                .pitch = statusRobot.pitch * PRECISION_DECIMALS_COMMS,
+                .pitch =  statusRobot.pitch * PRECISION_DECIMALS_COMMS,
                 .roll = statusRobot.roll * PRECISION_DECIMALS_COMMS,
-                .yaw = statusRobot.yaw * PRECISION_DECIMALS_COMMS,
+                .yaw =statusRobot.yaw * PRECISION_DECIMALS_COMMS,
                 .setPoint = statusRobot.setPointAngle * PRECISION_DECIMALS_COMMS,
                 .centerAngle = statusRobot.pidConfigAngle.centerAngle * PRECISION_DECIMALS_COMMS,
-                .statusCode = statusRobot.statusCode
+                .statusCode = 0x09//statusRobot.statusCode
             };
             sendDynamicData(newData);
         }
@@ -305,7 +304,7 @@ static void commsManager(void *pvParameters) {
         gpio_set_level(PIN_OSCILO, toggle);
         toggle = !toggle;
 
-        lastStateIsConnected = isBtConnected();
+        lastStateIsConnected = isTcpClientConnected();
 
         // testHardwareVibration();
         // printf(">angle:%f\n>outputMotor:%f\n",angleReference/10.0,statusRobot.speedL/100.0);
@@ -346,12 +345,12 @@ void testHardwareVibration(void) {
 static void ledHandler(void *pvParameters) {
     uint16_t delay = 1000;
     while(1) {
-        if (isBtConnected()) {
-            delay = 500;
-        }
-        else {
+        // if (isBtConnected()) {
+        //     delay = 500;
+        // }
+        // else {
             delay = 1000;
-        }
+        // }
         gpio_set_level(PIN_LED,1);
         vTaskDelay(pdMS_TO_TICKS(delay));
         gpio_set_level(PIN_LED,0);
@@ -389,8 +388,6 @@ void app_main() {
     mpu6050QueueHandler = xQueueCreate(1,sizeof(vector_queue_t));
     newMcbQueueHandler = xQueueCreate(1,sizeof(rx_motor_control_board_t));
 
-    pruebaqueue = xQueueCreate(100,100); // TODO: borrar
-
     storageInit();
 
     readParams = storageReadPidParams();
@@ -407,17 +404,17 @@ void app_main() {
     statusRobot.setPointAngle = readParams.centerAngle;
     printf("PID ANGLE Params: kp: %f , ki: %f , kd: %f,safetyLimits: %f,centerAngle: %f\n",readParams.kp,readParams.ki,readParams.kd,readParams.safetyLimits,readParams.centerAngle);
 
-    btInit(DEVICE_BT_NAME);
-    vTaskDelay(1000);
+    // btInit(DEVICE_BT_NAME);
+    // vTaskDelay(1000);
 
-    mpu6050_init_t configMpu = {
-        .intGpio = GPIO_MPU_INT,
-        .sclGpio = GPIO_MPU_SCL,
-        .sdaGpio = GPIO_MPU_SDA,
-        .priorityTask = MPU_HANDLER_PRIORITY,
-        .core = IMU_HANDLER_CORE
-    };
-    mpu6050_initialize(&configMpu);
+    // mpu6050_init_t configMpu = {
+    //     .intGpio = GPIO_MPU_INT,
+    //     .sclGpio = GPIO_MPU_SCL,
+    //     .sdaGpio = GPIO_MPU_SDA,
+    //     .priorityTask = MPU_HANDLER_PRIORITY,
+    //     .core = IMU_HANDLER_CORE
+    // };
+    // mpu6050_initialize(&configMpu);
 
     pid_init_t pidConfig[CANT_PIDS] = {
         {
@@ -460,6 +457,8 @@ void app_main() {
         motorsInit(configMotors);
         setMicroSteps(true);
     #endif
+
+    initTcpClient("");
 
     xTaskCreatePinnedToCore(imuControlHandler,"Imu Control",4096,NULL,IMU_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);
     xTaskCreatePinnedToCore(attitudeControl,"attitude control",4096,NULL,4,NULL,IMU_HANDLER_CORE);
