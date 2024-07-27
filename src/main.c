@@ -183,24 +183,24 @@ static void attitudeControl(void *pvParameters){
 
         float outputPosControl = (statusRobot.axisJoystickY / 100.00) * MAX_ANGLE_JOYSTICK;
 
-        if (statusRobot.statusCode == STATUS_ROBOT_STABILIZED) {
-            if (!statusRobot.axisJoystickX && !statusRobot.axisJoystickY) {
+        // if (statusRobot.statusCode == STATUS_ROBOT_STABILIZED) {
+        //     if (!statusRobot.axisJoystickX && !statusRobot.axisJoystickY) {
 
-                statusRobot.distanceInCms = ((statusRobot.posInMetersL + statusRobot.posInMetersR) / 2) * 100.00 ;
-                outputPosControl = pidCalculate(PID_POS,statusRobot.distanceInCms) * MAX_ANGLE_POS_CONTROL;
+        //         statusRobot.distanceInCms = ((statusRobot.posInMetersL + statusRobot.posInMetersR) / 2) * 100.00 ;
+        //         outputPosControl = pidCalculate(PID_POS,statusRobot.distanceInCms) * MAX_ANGLE_POS_CONTROL;
 
-                if (attitudeControlStat.attMode != ATT_MODE_POS_CONTROL) {
-                    attitudeControlStat.setPointPos = statusRobot.distanceInCms;
-                    pidSetSetPoint(PID_POS,attitudeControlStat.setPointPos);
-                    attitudeControlStat.attMode = ATT_MODE_POS_CONTROL;
-                    pidSetEnable(PID_POS);
-                }
-            }
-            else if (attitudeControlStat.attMode == ATT_MODE_POS_CONTROL) {
-                attitudeControlStat.attMode = ATT_MODE_ATTI;            // TODO: deberia switchear aca a modo control de velocidad
-                pidSetDisable(PID_POS);
-            }
-        }
+        //         if (attitudeControlStat.attMode != ATT_MODE_POS_CONTROL) {
+        //             attitudeControlStat.setPointPos = statusRobot.distanceInCms;
+        //             pidSetSetPoint(PID_POS,attitudeControlStat.setPointPos);
+        //             attitudeControlStat.attMode = ATT_MODE_POS_CONTROL;
+        //             pidSetEnable(PID_POS);
+        //         }
+        //     }
+        //     else if (attitudeControlStat.attMode == ATT_MODE_POS_CONTROL) {
+        //         attitudeControlStat.attMode = ATT_MODE_ATTI;            // TODO: deberia switchear aca a modo control de velocidad
+        //         pidSetDisable(PID_POS);
+        //     }
+        // }
 
         statusRobot.setPointAngle = statusRobot.pidConfigAngle.centerAngle + outputPosControl; // TODO: probar NO contemplar el center angle en position control
 
@@ -240,7 +240,7 @@ static void commsManager(void *pvParameters) {
         }
         
         if(xQueueReceive(newPidParamsQueueHandler,&newPidParams,0)) {
-            pidSetConstants(PID_POS,newPidParams.kp,newPidParams.ki,newPidParams.kd);
+            // pidSetConstants(PID_POS,newPidParams.kp,newPidParams.ki,newPidParams.kd);
             // pidSetConstants(PID_ANGLE,newPidParams.kp,newPidParams.ki,newPidParams.kd);
             // pidSetSetPoint(PID_ANGLE,newPidParams.centerAngle);
             // storageWritePidParams(newPidParams);            
@@ -272,7 +272,7 @@ static void commsManager(void *pvParameters) {
             // statusRobot.setPoint; 
         }
 
-        if (isTcpClientConnected()) {           // TODO: habilitar por TCP
+        if (isTcpClientConnected()) {
 
             if (!lastStateIsConnected) {
                 robot_local_configs_t newConfig = {
@@ -287,14 +287,14 @@ static void commsManager(void *pvParameters) {
             }
 
             robot_dynamic_data_t newData = {
-                .speedR = 0x0105,//statusRobot.speedR,
+                .speedR = statusRobot.speedR,
                 .speedL = statusRobot.speedL,
                 .pitch =  statusRobot.pitch * PRECISION_DECIMALS_COMMS,
                 .roll = statusRobot.roll * PRECISION_DECIMALS_COMMS,
                 .yaw =statusRobot.yaw * PRECISION_DECIMALS_COMMS,
                 .setPoint = statusRobot.setPointAngle * PRECISION_DECIMALS_COMMS,
                 .centerAngle = statusRobot.pidConfigAngle.centerAngle * PRECISION_DECIMALS_COMMS,
-                .statusCode = 0x09//statusRobot.statusCode
+                .statusCode = statusRobot.statusCode
             };
             sendDynamicData(newData);
         }
@@ -404,17 +404,14 @@ void app_main() {
     statusRobot.setPointAngle = readParams.centerAngle;
     printf("PID ANGLE Params: kp: %f , ki: %f , kd: %f,safetyLimits: %f,centerAngle: %f\n",readParams.kp,readParams.ki,readParams.kd,readParams.safetyLimits,readParams.centerAngle);
 
-    // btInit(DEVICE_BT_NAME);
-    // vTaskDelay(1000);
-
-    // mpu6050_init_t configMpu = {
-    //     .intGpio = GPIO_MPU_INT,
-    //     .sclGpio = GPIO_MPU_SCL,
-    //     .sdaGpio = GPIO_MPU_SDA,
-    //     .priorityTask = MPU_HANDLER_PRIORITY,
-    //     .core = IMU_HANDLER_CORE
-    // };
-    // mpu6050_initialize(&configMpu);
+    mpu6050_init_t configMpu = {
+        .intGpio = GPIO_MPU_INT,
+        .sclGpio = GPIO_MPU_SCL,
+        .sdaGpio = GPIO_MPU_SDA,
+        .priorityTask = MPU_HANDLER_PRIORITY,
+        .core = IMU_HANDLER_CORE
+    };
+    mpu6050_initialize(&configMpu);
 
     pid_init_t pidConfig[CANT_PIDS] = {
         {
@@ -458,6 +455,8 @@ void app_main() {
         setMicroSteps(true);
     #endif
 
+    esp_log_level_set("wifi", ESP_LOG_WARN);
+    esp_log_level_set("wifi_init", ESP_LOG_WARN);
     initTcpClient("");
 
     xTaskCreatePinnedToCore(imuControlHandler,"Imu Control",4096,NULL,IMU_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);

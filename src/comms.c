@@ -23,7 +23,7 @@ void spp_wr_task_start_up(void){
     xTaskCreatePinnedToCore(communicationHandler, "communicationHandler", 4096, NULL, 10, &commsHandle,COMMS_HANDLER_CORE);
 }
 
-void spp_wr_task_shut_down(void){
+void spp_wr_task_shut_down(void) {
     vTaskDelete(commsHandle);
 }
 

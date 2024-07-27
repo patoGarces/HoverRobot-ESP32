@@ -13,6 +13,8 @@
 #include "lwip/err.h"
 #include "lwip/sys.h"
 
+#include "../../../include/comms.h"
+
 /* The event group allows multiple bits for each event, but we only care about two events:
  * - we are connected to the AP with an IP
  * - we failed to connect after the maximum amount of retries */
@@ -44,6 +46,36 @@ static const char *TAG = "TCP CLIENT";
 
 uint8_t serverClientConnected = false;
 
+int sock = 0;   // TODO: sacar de aca
+
+static void tcpClientReceiver(void *pvParameters)
+{
+    char rx_buffer[128];
+    char host_ip[] = HOST_IP_ADDR;
+
+    while (true) {
+
+        int len = recv(sock, rx_buffer, sizeof(rx_buffer) - 1, 0);
+   
+        if (len < 0) {
+            ESP_LOGE(TAG, "recv failed: errno %d", errno);
+            // break;
+        }
+        else {
+            // rx_buffer[len] = 0; // Null-terminate whatever we received and treat like a string
+            ESP_LOGI(TAG, "Received %d bytes from %s", len, host_ip);
+            // ESP_LOGI(TAG, "%s", rx_buffer);
+            xStreamBufferSend(xStreamBufferReceiver,rx_buffer,len,1);
+            
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(25));
+
+    }
+    ESP_LOGE(TAG,"TCP CLIENT SOCKET vTASKDELETE");
+    vTaskDelete(NULL);
+}
+
 static void tcpClientSocket(void *pvParameters)
 {
     char rx_buffer[128];
@@ -59,8 +91,8 @@ static void tcpClientSocket(void *pvParameters)
         dest_addr.sin_addr.s_addr = inet_addr(host_ip);
         dest_addr.sin_family = AF_INET;
         dest_addr.sin_port = htons(PORT);
-        addr_family = AF_INET;
-        ip_protocol = IPPROTO_IP;
+        addr_family = AF_INET;                          // ipv4
+        ip_protocol = IPPROTO_TCP;//IPPROTO_IP;
 #elif defined(CONFIG_EXAMPLE_IPV6)
         struct sockaddr_in6 dest_addr = { 0 };
         inet6_aton(host_ip, &dest_addr.sin6_addr);
@@ -73,31 +105,30 @@ static void tcpClientSocket(void *pvParameters)
         struct sockaddr_storage dest_addr = { 0 };
         ESP_ERROR_CHECK(get_addr_from_stdin(PORT, SOCK_STREAM, &ip_protocol, &addr_family, &dest_addr));
 #endif
-        int sock =  socket(addr_family, SOCK_STREAM, ip_protocol);
+        sock =  socket(addr_family, SOCK_STREAM, ip_protocol);
         if (sock < 0) {
             ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
-            // break;
+            shutdown(sock, 0);
+            close(sock);
+            vTaskDelay(pdMS_TO_TICKS(500));
         } else {
             ESP_LOGI(TAG, "Socket created, connecting to %s:%d", host_ip, PORT);
 
             int errConnect = connect(sock, (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in6));
             if (errConnect != 0) {
                 ESP_LOGE(TAG, "Socket unable to connect: errno %d", errno);
-                // break;
+                close(sock);
+                // spp_wr_task_shut_down();
+                vTaskDelay(pdMS_TO_TICKS(500));
             } else {
                 ESP_LOGI(TAG, "Successfully connected");
                 serverClientConnected = true;
+                spp_wr_task_start_up();         // TODO: refactorizar este mecanismo HORRIBLE
+                xTaskCreatePinnedToCore(tcpClientReceiver, "tcp_client receiver", 4096, NULL,configMAX_PRIORITIES - 2, NULL,0);
+                
 
                 uint32_t contador = 0;
-                while (1) {
-                    
-                    
-                    // int err = lwip_send(sock, payload, strlen(payload), 0);
-                    // if (err < 0) {
-                    //     ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
-                    //     break;
-                    // }
-
+                while (true) {
                     BaseType_t bytesStreamReceived = xStreamBufferReceive(xStreamBufferSender, received_data, sizeof(received_data), 0);
 
                     if (bytesStreamReceived > 1) {
@@ -106,11 +137,11 @@ static void tcpClientSocket(void *pvParameters)
                             ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
                             break;
                         } 
-                        else {
-                            contador++;
-                            // ESP_LOGI(TAG, "Paquete enviado, header: %x, %x, len: %d", received_data[0],received_data[1],bytesStreamReceived);
-                            ESP_LOGI(TAG, "Paquetes enviados %ld", contador);
-                        }
+                        // else {
+                        //     contador++;
+                        //     // ESP_LOGI(TAG, "Paquete enviado, header: %x, %x, len: %d", received_data[0],received_data[1],bytesStreamReceived);
+                        //     ESP_LOGI(TAG, "Paquetes enviados %ld", contador);
+                        // }
                     }
 
                     // int len = recv(sock, rx_buffer, sizeof(rx_buffer) - 1, 0);
