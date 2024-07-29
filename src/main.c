@@ -4,6 +4,7 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
+#include "string.h"
 #include "stdio.h"
 #include "math.h"
 #include "esp_log.h"
@@ -75,6 +76,10 @@ int16_t cutSpeedRange(int16_t speed) {
     }
 }
 
+// uint32_t ipAddressToUin32(uint8_t ip1,uint8_t ip2,uint8_t ip3,uint8_t ip4) {
+//     return (((uint32_t)ip1) << 24) + (((uint32_t)ip2) << 16) + (((uint32_t)ip3) << 8) + ip4; 
+// }
+
 void setStatusRobot(uint8_t newStatus) {
     const char *TAG = "StatusRobot";
 
@@ -89,7 +94,7 @@ void setStatusRobot(uint8_t newStatus) {
             speedMotors.enable = false;
             speedMotors.motorL = 0;
             speedMotors.motorR = 0;
-            ESP_LOGI(TAG,"DISABLED -> ROBOT ARMED, safetyLimits: %f",statusRobot.pidConfigAngle.safetyLimits);
+            ESP_LOGI(TAG,"DISABLED -> ROBOT ARMED, safetyLimits: %f",statusRobot.safetyLimits);
         break;
 
         case STATUS_ROBOT_ERROR:
@@ -114,7 +119,6 @@ static void imuControlHandler(void *pvParameters) {
     float angleReference = 0.00;
 
     const char *TAG = "ImuControlHandler";
-    statusRobot.statusCode = STATUS_ROBOT_ARMED;
 
     while(1) {
         if(xQueueReceive(mpu6050QueueHandler,&newAngles,pdMS_TO_TICKS(10))) {
@@ -140,15 +144,15 @@ static void imuControlHandler(void *pvParameters) {
             float angleSafetyLimit = (safetyLimitProm[0] + safetyLimitProm[1] + safetyLimitProm[2]) / 3;
 
             if (pidGetEnable(PID_ANGLE)) { 
-                if ((angleSafetyLimit < (statusRobot.pidConfigAngle.centerAngle-statusRobot.pidConfigAngle.safetyLimits)) ||
-                    (angleSafetyLimit > (statusRobot.pidConfigAngle.centerAngle+statusRobot.pidConfigAngle.safetyLimits))) { 
+                if ((angleSafetyLimit < (statusRobot.centerAngle-statusRobot.safetyLimits)) ||
+                    (angleSafetyLimit > (statusRobot.centerAngle+statusRobot.safetyLimits))) { 
                     pidSetDisable(PID_ANGLE);
                     setStatusRobot(STATUS_ROBOT_ARMED);
                 }
             }
             else { 
-                if ((angleReference > (statusRobot.pidConfigAngle.centerAngle - 1)) && 
-                    (angleReference < (statusRobot.pidConfigAngle.centerAngle + 1))) { 
+                if ((angleReference > (statusRobot.centerAngle - 1)) && 
+                    (angleReference < (statusRobot.centerAngle + 1))) { 
                     pidSetEnable(PID_ANGLE);   
                     setStatusRobot(STATUS_ROBOT_STABILIZED);
                 }
@@ -202,7 +206,7 @@ static void attitudeControl(void *pvParameters){
         //     }
         // }
 
-        statusRobot.setPointAngle = statusRobot.pidConfigAngle.centerAngle + outputPosControl; // TODO: probar NO contemplar el center angle en position control
+        statusRobot.setPointAngle = statusRobot.centerAngle + outputPosControl; // TODO: probar NO contemplar el center angle en position control
 
         // PID POS
         // printf(">inPos:%f\n>spPos:%f\n>spPos2:%f\n>outPos:%f\n",statusRobot.distanceInCms,attitudeControlStat.setPointPos,pidGetSetPoint(PID_POS)*100,outputPosControl);
@@ -226,8 +230,6 @@ static void commsManager(void *pvParameters) {
     command_app_raw_t newCommand;
     rx_motor_control_board_t receiveMcb;
     control_app_raw_t newControl;
-
-    statusRobot.statusCode = STATUS_ROBOT_INIT;
 
     uint8_t toggle = false;
     const char *TAG = "commsManager";
@@ -261,7 +263,7 @@ static void commsManager(void *pvParameters) {
         
         if(xQueueReceive(newMcbQueueHandler,&receiveMcb,0)) {
             statusRobot.batVoltage = receiveMcb.batVoltage;
-            statusRobot.tempEscs = receiveMcb.boardTemp;
+            statusRobot.tempImu = receiveMcb.boardTemp;
             statusRobot.speedMeasR = receiveMcb.speedR_meas;
             statusRobot.speedMeasL = receiveMcb.speedL_meas;
             statusRobot.posInMetersR = pos2mts(receiveMcb.posR);
@@ -275,25 +277,24 @@ static void commsManager(void *pvParameters) {
         if (isTcpClientConnected()) {
 
             if (!lastStateIsConnected) {
-                robot_local_configs_t newConfig = {
-                    .kp = statusRobot.pidConfigAngle.kp * PRECISION_DECIMALS_COMMS,
-                    .ki = statusRobot.pidConfigAngle.ki * PRECISION_DECIMALS_COMMS,
-                    .kd = statusRobot.pidConfigAngle.kd * PRECISION_DECIMALS_COMMS,
-                    .centerAngle = statusRobot.pidConfigAngle.centerAngle * PRECISION_DECIMALS_COMMS,
-                    .safetyLimits = statusRobot.pidConfigAngle.safetyLimits * PRECISION_DECIMALS_COMMS,
-                };
-                printf("ENVIO CONFIG LOCAL-> safetylimits: %d\n",newConfig.safetyLimits);
-                sendLocalConfig(newConfig);
+                robot_local_configs_t localConfig;
+                localConfig.centerAngle = statusRobot.centerAngle;
+                localConfig.safetyLimits = statusRobot.safetyLimits;
+                memcpy(localConfig.pids, statusRobot.pids, sizeof(statusRobot.pids));
+                ESP_LOGI(TAG,"Envio config local");
+                sendLocalConfig(localConfig);
             }
 
             robot_dynamic_data_t newData = {
+                .batVoltage = statusRobot.batVoltage,
+                .imuTemp = statusRobot.tempImu,
                 .speedR = statusRobot.speedR,
                 .speedL = statusRobot.speedL,
                 .pitch =  statusRobot.pitch * PRECISION_DECIMALS_COMMS,
                 .roll = statusRobot.roll * PRECISION_DECIMALS_COMMS,
                 .yaw =statusRobot.yaw * PRECISION_DECIMALS_COMMS,
                 .setPoint = statusRobot.setPointAngle * PRECISION_DECIMALS_COMMS,
-                .centerAngle = statusRobot.pidConfigAngle.centerAngle * PRECISION_DECIMALS_COMMS,
+                .centerAngle = statusRobot.centerAngle * PRECISION_DECIMALS_COMMS,
                 .statusCode = statusRobot.statusCode
             };
             sendDynamicData(newData);
@@ -381,6 +382,8 @@ void app_main() {
     gpio_set_direction(PIN_OSCILO , GPIO_MODE_OUTPUT);
     gpio_set_level(PIN_OSCILO, 1);
 
+    setStatusRobot(STATUS_ROBOT_INIT);
+
     receiveControlQueueHandler = xQueueCreate(1, sizeof(control_app_raw_t));
     newPidParamsQueueHandler = xQueueCreate(1,sizeof(pid_params_t));
     newCommandQueueHandler = xQueueCreate(1, sizeof(command_app_raw_t));
@@ -400,8 +403,10 @@ void app_main() {
         readParams.safetyLimits = 45;
     #endif
 
-    statusRobot.pidConfigAngle = readParams;
+    statusRobot.pids[PID_ANGLE] = readParams;                       // TODO: falta guardar el resto de los params de pid
     statusRobot.setPointAngle = readParams.centerAngle;
+    statusRobot.centerAngle = readParams.centerAngle;
+    statusRobot.safetyLimits = readParams.safetyLimits;
     printf("PID ANGLE Params: kp: %f , ki: %f , kd: %f,safetyLimits: %f,centerAngle: %f\n",readParams.kp,readParams.ki,readParams.kd,readParams.safetyLimits,readParams.centerAngle);
 
     mpu6050_init_t configMpu = {
@@ -459,6 +464,7 @@ void app_main() {
     esp_log_level_set("wifi_init", ESP_LOG_WARN);
     initTcpClient("");
 
+    setStatusRobot(STATUS_ROBOT_ARMED);
     xTaskCreatePinnedToCore(imuControlHandler,"Imu Control",4096,NULL,IMU_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);
     xTaskCreatePinnedToCore(attitudeControl,"attitude control",4096,NULL,4,NULL,IMU_HANDLER_CORE);
     xTaskCreatePinnedToCore(commsManager,"communication manager",4096,NULL,COMM_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);

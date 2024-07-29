@@ -66,6 +66,8 @@ enum {
  */
 typedef struct {
     uint16_t headerPackage;
+    uint16_t batVoltage;
+    uint16_t imuTemp;
     int16_t  speedR;
     int16_t  speedL;
     int16_t  pitch;
@@ -77,17 +79,32 @@ typedef struct {
 } robot_dynamic_data_t;
 
 
+typedef struct {
+    uint16_t kp;
+    uint16_t ki;
+    uint16_t kd;
+} pid_params_raw_t;
+
+/**
+ * @brief Estructura de datos enviada a la app, contiene settings locales
+ */
+typedef struct {
+    float centerAngle;
+    float safetyLimits;
+    pid_params_t pids[CANT_PIDS];
+} robot_local_configs_t;
+
+
 /**
  * @brief Estructura de datos enviada a la app, contiene settings locales
  */
 typedef struct {
     uint16_t headerPackage;
-    uint16_t kp;
-    uint16_t ki;
-    uint16_t kd;
     int16_t  centerAngle;
     uint16_t safetyLimits;
-} robot_local_configs_t;
+    pid_params_raw_t pid[CANT_PIDS];
+} robot_local_configs_raw_t;
+
 
 void spp_wr_task_start_up(void);
 void spp_wr_task_shut_down(void);

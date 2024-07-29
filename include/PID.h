@@ -4,8 +4,7 @@
 #include <stdio.h>
 #include "stdbool.h"
 #include "esp_err.h"
-
-#define CANT_PIDS	3
+#include "main.h"
 
 typedef struct {
 	float kp;

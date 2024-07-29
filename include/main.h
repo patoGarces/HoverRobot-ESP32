@@ -4,7 +4,6 @@
 
 // PARA DETECTAR EL ESP32S3: CONFIG_IDF_TARGET_ESP32S3
 
-
 // #define HARDWARE_PROTOTYPE
 #define HARDWARE_S3
 
@@ -16,6 +15,8 @@
 #define IMU_HANDLER_CORE        APP_CPU_NUM     // core 1
 
 #define COMM_HANDLER_PRIORITY   configMAX_PRIORITIES - 4
+
+#define CANT_PIDS	3
 
 #if defined(HARDWARE_PROTOTYPE) && defined(HARDWARE_S3)
 #error Error hardware robot config
@@ -58,7 +59,7 @@
 
 #endif
 
-enum {
+enum {              // OJO: en sync con App
     PID_ANGLE,
     PID_POS,
     PID_SPEED
@@ -84,17 +85,14 @@ typedef struct{
     float safetyLimits;
 } pid_params_t;
 
-
-
 /**
  * @brief Esta estructura de datos generica del robot
  */
 typedef struct {
     uint16_t batVoltage;
     uint16_t batPercent;
-    uint16_t batTemp;
     uint16_t tempImu;
-    uint16_t tempEscs;
+    // uint16_t tempEscs;
     int16_t  speedR;
     int16_t  speedL;
     float    pitch;
@@ -107,9 +105,14 @@ typedef struct {
     float    distanceInCms;
     int16_t  axisJoystickX;
     int16_t  axisJoystickY;
-    pid_params_t pidConfigAngle;
+    float centerAngle;
+    float safetyLimits;
+    pid_params_t pids[CANT_PIDS];
     float    setPointAngle;
     uint16_t statusCode;
 } status_robot_t;
+
+
+uint32_t ipAddressToUin32(uint8_t ip1,uint8_t ip2,uint8_t ip3,uint8_t ip4);
 
 #endif

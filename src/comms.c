@@ -106,20 +106,35 @@ void sendDynamicData(robot_dynamic_data_t dynamicData) {
         /* TODO: Manejar el caso en el que el buffer está lleno y no se pueden enviar datos */
         ESP_LOGI("COMMS", "BUFFER DE TRANSMISION OVERFLOW");
     }
+}
 
-    // char SendAngleChar[50];
-    // // sprintf(SendAngleChar,">angle:%f\n>outputMotor:%f\n",status.actualAngle,status.speedL/100.0);
-    // sprintf(SendAngleChar,">angle:%f\n",status.actualAngle);
-    // printf(SendAngleChar); 
-    // if (xStreamBufferSend(xStreamBufferSender, &SendAngleChar, sizeof(SendAngleChar), 1) != pdPASS) {
-    //     /* TODO: Manejar el caso en el que el buffer está lleno y no se pueden enviar datos */
-    // }
+/*
+ * Convierto los parametros pid en float a u16 o i16 segun corresponda
+*/
+static pid_params_raw_t convertPidParamsToRaw(pid_params_t pidParams) {
+
+    pid_params_raw_t pidRaw = {
+        .kp = pidParams.kp * PRECISION_DECIMALS_COMMS,
+        .ki = pidParams.ki * PRECISION_DECIMALS_COMMS,
+        .kd = pidParams.kd * PRECISION_DECIMALS_COMMS,
+    };
+    return pidRaw;
 }
 
 void sendLocalConfig(robot_local_configs_t localConfig) {
-    localConfig.headerPackage = HEADER_PACKAGE_LOCAL_CONFIG;
+    robot_local_configs_raw_t localConfigRaw;
+    
+    localConfigRaw.headerPackage = HEADER_PACKAGE_LOCAL_CONFIG;
+    localConfigRaw.centerAngle = localConfig.centerAngle * PRECISION_DECIMALS_COMMS;
+    localConfigRaw.safetyLimits = localConfig.safetyLimits * PRECISION_DECIMALS_COMMS;
 
-    if (xStreamBufferSend(xStreamBufferSender, &localConfig, sizeof(localConfig), 1) != sizeof(localConfig)) {
+    for(uint8_t i=0;i<CANT_PIDS;i++) {
+        localConfigRaw.pid[i] = convertPidParamsToRaw(localConfig.pids[i]);
+    }
+
+    ESP_LOGI("SendLocalConfig","center: %d, safety: %d",localConfigRaw.centerAngle,localConfigRaw.safetyLimits);
+
+    if (xStreamBufferSend(xStreamBufferSender, &localConfigRaw, sizeof(localConfigRaw), 1) != sizeof(localConfigRaw)) {
         /* TODO: Manejar el caso en el que el buffer está lleno y no se pueden enviar datos */
          ESP_LOGI("COMMS", "BUFFER DE TRANSMISION OVERFLOW");
     }

@@ -21,9 +21,9 @@
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
 
-#define EXAMPLE_ESP_WIFI_SSID       "Speedy-Fibra-8F8D64"
-#define EXAMPLE_ESP_WIFI_PASS       "39919131"
-#define HOST_IP_ADDR                "192.168.1.35"
+#define EXAMPLE_ESP_WIFI_SSID       "HoverRobot" // "Speedy-Fibra-8F8D64"
+#define EXAMPLE_ESP_WIFI_PASS       "12345678" // "39919131"
+#define HOST_IP_ADDR                "192.168.0.100" // "192.168.1.35"
 #define PORT                        8080
 #define CONFIG_EXAMPLE_IPV4 1
 // #define CONFIG_EXAMPLE_IPV6 1
@@ -76,9 +76,7 @@ static void tcpClientReceiver(void *pvParameters)
     vTaskDelete(NULL);
 }
 
-static void tcpClientSocket(void *pvParameters)
-{
-    char rx_buffer[128];
+static void tcpClientSocket(void *pvParameters) {
     char host_ip[] = HOST_IP_ADDR;
     int addr_family = 0;
     int ip_protocol = 0;
@@ -126,8 +124,6 @@ static void tcpClientSocket(void *pvParameters)
                 spp_wr_task_start_up();         // TODO: refactorizar este mecanismo HORRIBLE
                 xTaskCreatePinnedToCore(tcpClientReceiver, "tcp_client receiver", 4096, NULL,configMAX_PRIORITIES - 2, NULL,0);
                 
-
-                uint32_t contador = 0;
                 while (true) {
                     BaseType_t bytesStreamReceived = xStreamBufferReceive(xStreamBufferSender, received_data, sizeof(received_data), 0);
 
@@ -137,28 +133,7 @@ static void tcpClientSocket(void *pvParameters)
                             ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
                             break;
                         } 
-                        // else {
-                        //     contador++;
-                        //     // ESP_LOGI(TAG, "Paquete enviado, header: %x, %x, len: %d", received_data[0],received_data[1],bytesStreamReceived);
-                        //     ESP_LOGI(TAG, "Paquetes enviados %ld", contador);
-                        // }
                     }
-
-                    // int len = recv(sock, rx_buffer, sizeof(rx_buffer) - 1, 0);
-                    // ESP_LOGI(TAG,"post recv method");
-                    // // Error occurred during receiving
-                    // if (len < 0) {
-                    //     ESP_LOGE(TAG, "recv failed: errno %d", errno);
-                    //     break;
-                    // }
-                    // // Data received
-                    // else {
-                    //     rx_buffer[len] = 0; // Null-terminate whatever we received and treat like a string
-                    //     ESP_LOGI(TAG, "Received %d bytes from %s:", len, host_ip);
-                    //     ESP_LOGI(TAG, "%s", rx_buffer);
-                    // }
-
-
 
                     vTaskDelay(pdMS_TO_TICKS(25));
                 }
@@ -183,7 +158,7 @@ static void tcpClientSocket(void *pvParameters)
 //         wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
 //         ESP_LOGI(TAG, "station "MACSTR" join, AID=%d",
 //                  MAC2STR(event->mac), event->aid);
-        
+// 
 //         xTaskCreate(tcp_client_task, "tcp_client", 4096, NULL, 5, NULL);
 //     } else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) {
 //         wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
@@ -197,16 +172,16 @@ static void tcpClientSocket(void *pvParameters)
 //     ESP_ERROR_CHECK(esp_netif_init());
 //     ESP_ERROR_CHECK(esp_event_loop_create_default());
 //     esp_netif_create_default_wifi_ap();
-
+// 
 //     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
 //     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-
+// 
 //     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
 //                                                         ESP_EVENT_ANY_ID,
 //                                                         &wifi_event_handler,
 //                                                         NULL,
 //                                                         NULL));
-
+// 
 //     wifi_config_t wifi_config = {
 //         .ap = {
 //             .ssid = EXAMPLE_ESP_WIFI_SSID,
@@ -228,11 +203,11 @@ static void tcpClientSocket(void *pvParameters)
 //     if (strlen(EXAMPLE_ESP_WIFI_PASS) == 0) {
 //         wifi_config.ap.authmode = WIFI_AUTH_OPEN;
 //     }
-
+// 
 //     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
 //     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
 //     ESP_ERROR_CHECK(esp_wifi_start());
-
+// 
 //     ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
 //              EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS, EXAMPLE_ESP_WIFI_CHANNEL);
 // }
@@ -262,8 +237,7 @@ static void wifiAndIpEvent(void* arg, esp_event_base_t event_base,
     }
 }
 
-void wifi_init_sta(void)
-{
+void wifi_init_sta(void) {
     s_wifi_event_group = xEventGroupCreate();
 
     ESP_ERROR_CHECK(esp_netif_init());
@@ -329,8 +303,6 @@ void wifi_init_sta(void)
     ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
     vEventGroupDelete(s_wifi_event_group);
 }
-
-
 
 void initTcpClient(char *serverIp) {
     //Initialize NVS
