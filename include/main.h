@@ -16,6 +16,8 @@
 
 #define COMM_HANDLER_PRIORITY   configMAX_PRIORITIES - 4
 
+#define PRECISION_DECIMALS_COMMS    100.00              // Precision al convertir la data cruda a float, en este caso 100 = 0.01
+
 #define CANT_PIDS	3
 
 #if defined(HARDWARE_PROTOTYPE) && defined(HARDWARE_S3)
@@ -77,41 +79,59 @@ typedef struct {
     uint8_t enable;
 } output_motors_t;
 
-typedef struct{
+// typedef struct {
+//     uint8_t indexPid;
+//     float kp;
+//     float ki;
+//     float kd;
+//     float centerAngle;
+//     float safetyLimits;
+// } pid_params_t;
+
+typedef struct {
     float kp;
     float ki;
     float kd;
+    float setPoint;
+} pid_floats_t;
+
+typedef struct {
+    int16_t joyAxisX;
+    int16_t joyAxisY;
+    uint16_t compassYaw;
+} direction_control_t;
+
+/**
+ * @brief Estructura de datos enviada a la app, contiene settings locales
+ */
+typedef struct {
     float centerAngle;
     float safetyLimits;
-} pid_params_t;
+    pid_floats_t pids[CANT_PIDS];
+} robot_local_configs_t;
 
 /**
  * @brief Esta estructura de datos generica del robot
  */
 typedef struct {
-    uint16_t batVoltage;
-    uint16_t batPercent;
-    uint16_t tempImu;
-    // uint16_t tempEscs;
-    int16_t  speedR;
-    int16_t  speedL;
-    float    pitch;
-    float    roll;
-    float    yaw;
-    int16_t  speedMeasR;
-    int16_t  speedMeasL;
-    float    posInMetersR;
-    float    posInMetersL;
-    float    distanceInCms;
-    int16_t  axisJoystickX;
-    int16_t  axisJoystickY;
-    float centerAngle;
-    float safetyLimits;
-    pid_params_t pids[CANT_PIDS];
-    float    setPointAngle;
-    uint16_t statusCode;
+    uint16_t                batVoltage;
+    uint16_t                batPercent;
+    uint16_t                tempImu;
+    // uint16_t                 tempEscs;
+    int16_t                 speedR;
+    int16_t                 speedL;
+    float                   pitch;
+    float                   roll;
+    float                   yaw;
+    int16_t                 speedMeasR;
+    int16_t                 speedMeasL;
+    float                   posInMetersR;
+    float                   posInMetersL;
+    float                   distanceInCms;
+    direction_control_t     dirControl;
+    robot_local_configs_t   localConfig;
+    uint16_t                statusCode;
 } status_robot_t;
-
 
 uint32_t ipAddressToUin32(uint8_t ip1,uint8_t ip2,uint8_t ip3,uint8_t ip4);
 

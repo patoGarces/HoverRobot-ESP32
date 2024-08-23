@@ -6,29 +6,31 @@ pid_control_t pidControl[CANT_PIDS];
 
 float normalize(float value);
 
-esp_err_t pidInit(pid_init_t initParams[CANT_PIDS]) {
-    for(uint8_t i = 0;i<CANT_PIDS;i++) { 
-        if (initParams[i].sampleTimeInMs > 1000.00 || initParams[i].sampleTimeInMs < 1.00) {
-            return ESP_FAIL;
-        }
-        pidControl[i].sampleTimeInSec = (float)initParams[i].sampleTimeInMs / 1000;
+esp_err_t pidInit(pid_init_t initConfig) {
+
+    if (initConfig.sampleTimeInMs > MAX_PERIOD_PID || initConfig.sampleTimeInMs < MIN_PERIOD_PID) {
+        return ESP_FAIL;
+    }
+
+    for(uint8_t i=0;i<CANT_PIDS;i++) { 
+        pidControl[i].sampleTimeInSec = initConfig.sampleTimeInMs / 1000.00;
         pidControl[i].enablePID = false;
-        pidSetConstants(i,initParams[i].kp, initParams[i].ki, initParams[i].kd);
-        pidSetSetPoint(i,initParams[i].initSetPoint);
+        pidSetConstants(i,initConfig.pids[i].kp, initConfig.pids[i].ki, initConfig.pids[i].kd);
+        pidSetSetPoint(i,initConfig.pids[i].setPoint);
     }
     return ESP_OK;
 }
 
 void pidSetEnable(uint8_t numPid) {
-    pidControl[numPid].iTerm = 0.00;
-    pidControl[numPid].lastInput = 0.00;
+    // pidControl[numPid].iTerm = 0.00;
+    // pidControl[numPid].lastInput = 0.00;
     pidControl[numPid].enablePID = true;
 }
 
 void pidSetDisable(uint8_t numPid) {
     pidControl[numPid].enablePID = false;
-    pidControl[numPid].iTerm = 0.00;
-    pidControl[numPid].lastInput = 0.00;
+    // pidControl[numPid].iTerm = 0.00;
+    // pidControl[numPid].lastInput = 0.00;
 }
 
 bool pidGetEnable(uint8_t numPid) {

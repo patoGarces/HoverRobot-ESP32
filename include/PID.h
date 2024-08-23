@@ -6,11 +6,19 @@
 #include "esp_err.h"
 #include "main.h"
 
+#define MIN_PERIOD_PID	1.00
+#define MAX_PERIOD_PID	1000.00
+
+// typedef struct {
+// 	float kp;
+//     float ki;
+//     float kd;
+// 	float initSetPoint;
+// 	float sampleTimeInMs;
+// } pid_init_t;
+
 typedef struct {
-	float kp;
-    float ki;
-    float kd;
-	float initSetPoint;
+	pid_floats_t pids[CANT_PIDS];
 	float sampleTimeInMs;
 } pid_init_t;
 
@@ -25,7 +33,7 @@ typedef struct {
 	float sampleTimeInSec;
 } pid_control_t;
 
-esp_err_t pidInit(pid_init_t initParams[CANT_PIDS]);
+esp_err_t pidInit(pid_init_t initConfig);
 
 void pidSetEnable(uint8_t numPid);
 

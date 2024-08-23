@@ -58,7 +58,8 @@
         "iterator": "c",
         "tcp_client.h": "c",
         "err.h": "c",
-        "math.h": "c"
+        "math.h": "c",
+        "utils.h": "c"
     },
     "idf.portWin": "COM11",
     "idf.adapterTargetName": "esp32s3",

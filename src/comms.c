@@ -38,10 +38,10 @@ uint32_t getUint16( uint16_t index, char* payload){
 void communicationHandler(void * param) {
     char received_data[100];
     uint16_t contTimeout = 0;
-    pid_settings_raw_t  newPidSettings;
-    pid_params_t        pidParams;
-    control_app_raw_t   newControlVal;
-    command_app_raw_t   newCommand;
+    pid_settings_app_raw_t      newPidSettingsRaw;
+    pid_settings_comms_t        pidSettingsComms;
+    control_app_raw_t           newControlVal;
+    command_app_raw_t           newCommand;
     
     while(true) {
         BaseType_t bytes_received = xStreamBufferReceive(xStreamBufferReceiver, received_data, sizeof(received_data), 0);//25);
@@ -50,15 +50,16 @@ void communicationHandler(void * param) {
             uint16_t headerPackage = getUint16(0,received_data);
             switch(headerPackage) {
                 case HEADER_PACKAGE_SETTINGS: 
-                    if (bytes_received == sizeof(newPidSettings)) {
-                        memcpy(&newPidSettings,received_data,bytes_received);
+                    if (bytes_received == sizeof(newPidSettingsRaw)) {
+                        memcpy(&newPidSettingsRaw,received_data,bytes_received);
  
-                        pidParams.safetyLimits = newPidSettings.safetyLimits / PRECISION_DECIMALS_COMMS;
-                        pidParams.centerAngle = newPidSettings.centerAngle / PRECISION_DECIMALS_COMMS;
-                        pidParams.kp = newPidSettings.kp / PRECISION_DECIMALS_COMMS;
-                        pidParams.ki = newPidSettings.ki / PRECISION_DECIMALS_COMMS;
-                        pidParams.kd = newPidSettings.kd / PRECISION_DECIMALS_COMMS;
-                        xQueueSend(newPidParamsQueueHandler,(void*)&pidParams,0);
+                        pidSettingsComms.indexPid = newPidSettingsRaw.indexPid;            // TODO: actualizar nuevos pid_floats_t
+                        pidSettingsComms.safetyLimits = newPidSettingsRaw.safetyLimits / PRECISION_DECIMALS_COMMS;
+                        pidSettingsComms.centerAngle = newPidSettingsRaw.centerAngle / PRECISION_DECIMALS_COMMS;
+                        pidSettingsComms.kp = newPidSettingsRaw.kp / PRECISION_DECIMALS_COMMS;
+                        pidSettingsComms.ki = newPidSettingsRaw.ki / PRECISION_DECIMALS_COMMS;
+                        pidSettingsComms.kd = newPidSettingsRaw.kd / PRECISION_DECIMALS_COMMS;
+                        xQueueSend(newPidParamsQueueHandler,(void*)&pidSettingsComms,0);
                     }
                 break;
 
@@ -68,12 +69,7 @@ void communicationHandler(void * param) {
                     contTimeout = 0;
                     // printf("NewControl recibido!\n");
                     xQueueSend(receiveControlQueueHandler,(void*)&newControlVal,0);
-                         
-                    // }
-                    // else {
-                    //     esp_log_buffer_hex("COMMS_HANDLER",(uint8_t *)(received_data),bytes_received);
-                    //     printf("\n***** SIZEOFF NO COINCIDE: %d , %d*****\n",bytes_received,sizeof(newControlVal));
-                    // }
+
                 break;
 
                 case HEADER_PACKAGE_COMMAND:
@@ -108,28 +104,16 @@ void sendDynamicData(robot_dynamic_data_t dynamicData) {
     }
 }
 
-/*
- * Convierto los parametros pid en float a u16 o i16 segun corresponda
-*/
-static pid_params_raw_t convertPidParamsToRaw(pid_params_t pidParams) {
-
-    pid_params_raw_t pidRaw = {
-        .kp = pidParams.kp * PRECISION_DECIMALS_COMMS,
-        .ki = pidParams.ki * PRECISION_DECIMALS_COMMS,
-        .kd = pidParams.kd * PRECISION_DECIMALS_COMMS,
-    };
-    return pidRaw;
-}
-
 void sendLocalConfig(robot_local_configs_t localConfig) {
-    robot_local_configs_raw_t localConfigRaw;
+    robot_local_configs_comms_t localConfigRaw;
+
     
     localConfigRaw.headerPackage = HEADER_PACKAGE_LOCAL_CONFIG;
     localConfigRaw.centerAngle = localConfig.centerAngle * PRECISION_DECIMALS_COMMS;
     localConfigRaw.safetyLimits = localConfig.safetyLimits * PRECISION_DECIMALS_COMMS;
 
     for(uint8_t i=0;i<CANT_PIDS;i++) {
-        localConfigRaw.pid[i] = convertPidParamsToRaw(localConfig.pids[i]);
+        localConfigRaw.pid[i] = convertPidFloatsToRaw(localConfig.pids[i]);
     }
 
     ESP_LOGI("SendLocalConfig","center: %d, safety: %d",localConfigRaw.centerAngle,localConfigRaw.safetyLimits);

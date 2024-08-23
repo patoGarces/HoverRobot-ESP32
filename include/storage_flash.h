@@ -5,7 +5,7 @@
 #include "main.h"
 
 void storageInit(void);
-void storageWritePidParams(pid_params_t params);
-pid_params_t storageReadPidParams(void);
+void storageLocalConfig(robot_local_configs_t params);
+robot_local_configs_t getFromStorageLocalConfig(void);
 
 #endif

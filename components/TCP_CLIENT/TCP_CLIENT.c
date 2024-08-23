@@ -21,9 +21,24 @@
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
 
-#define EXAMPLE_ESP_WIFI_SSID       "HoverRobot" // "Speedy-Fibra-8F8D64"
-#define EXAMPLE_ESP_WIFI_PASS       "12345678" // "39919131"
-#define HOST_IP_ADDR                "192.168.0.100" // "192.168.1.35"
+// AP CASA
+// #define EXAMPLE_ESP_WIFI_SSID        "Speedy-Fibra-8F8D64"
+// #define EXAMPLE_ESP_WIFI_PASS       "39919131"
+// #define HOST_IP_ADDR                "192.168.1.35"
+
+// AP TENDA
+// #define EXAMPLE_ESP_WIFI_SSID       "HoverRobot"
+// #define EXAMPLE_ESP_WIFI_PASS       "12345678"
+// #define HOST_IP_ADDR                "192.168.0.100"
+
+
+// STA PROPIO
+#define EXAMPLE_ESP_WIFI_SSID       "HoverRobotV2"
+#define EXAMPLE_ESP_WIFI_PASS       "12345678"
+#define HOST_IP_ADDR                "192.168.4.2"
+#define EXAMPLE_ESP_WIFI_CHANNEL    1
+#define EXAMPLE_MAX_STA_CONN        2
+
 #define PORT                        8080
 #define CONFIG_EXAMPLE_IPV4 1
 // #define CONFIG_EXAMPLE_IPV6 1
@@ -59,18 +74,14 @@ static void tcpClientReceiver(void *pvParameters)
    
         if (len < 0) {
             ESP_LOGE(TAG, "recv failed: errno %d", errno);
-            // break;
         }
         else {
-            // rx_buffer[len] = 0; // Null-terminate whatever we received and treat like a string
-            ESP_LOGI(TAG, "Received %d bytes from %s", len, host_ip);
-            // ESP_LOGI(TAG, "%s", rx_buffer);
+            // ESP_LOGI(TAG, "Received %d bytes from %s", len, host_ip);
             xStreamBufferSend(xStreamBufferReceiver,rx_buffer,len,1);
             
         }
 
         vTaskDelay(pdMS_TO_TICKS(25));
-
     }
     ESP_LOGE(TAG,"TCP CLIENT SOCKET vTASKDELETE");
     vTaskDelete(NULL);
@@ -151,37 +162,38 @@ static void tcpClientSocket(void *pvParameters) {
     vTaskDelete(NULL);
 }
 
-// static void wifi_event_handler(void* arg, esp_event_base_t event_base,
-//                                     int32_t event_id, void* event_data)
-// {
-//     if (event_id == WIFI_EVENT_AP_STACONNECTED) {
-//         wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
-//         ESP_LOGI(TAG, "station "MACSTR" join, AID=%d",
-//                  MAC2STR(event->mac), event->aid);
-// 
-//         xTaskCreate(tcp_client_task, "tcp_client", 4096, NULL, 5, NULL);
-//     } else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) {
-//         wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
-//         ESP_LOGI(TAG, "station "MACSTR" leave, AID=%d",
-//                  MAC2STR(event->mac), event->aid);
-//     }
-// }
+static void wifi_event_handler(void* arg, esp_event_base_t event_base,
+                                    int32_t event_id, void* event_data)
+{
+    if (event_id == WIFI_EVENT_AP_STACONNECTED) {
+        wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
+        ESP_LOGI(TAG, "station "MACSTR" join, AID=%d",
+                 MAC2STR(event->mac), event->aid);
 
-// void wifi_init_softap(void)
-// {
-//     ESP_ERROR_CHECK(esp_netif_init());
-//     ESP_ERROR_CHECK(esp_event_loop_create_default());
-//     esp_netif_create_default_wifi_ap();
-// 
-//     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-//     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-// 
-//     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
-//                                                         ESP_EVENT_ANY_ID,
-//                                                         &wifi_event_handler,
-//                                                         NULL,
-//                                                         NULL));
-// 
+        ESP_LOGI(TAG,"iniciando tcp_client_task");
+        xTaskCreatePinnedToCore(tcpClientSocket, "tcp_client", 4096, NULL,configMAX_PRIORITIES - 1, NULL,0);
+    } else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) {
+        wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
+        ESP_LOGI(TAG, "station "MACSTR" leave, AID=%d",
+                 MAC2STR(event->mac), event->aid);
+    }
+}
+
+void wifi_init_softap(void)
+{
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    esp_netif_create_default_wifi_ap();
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+                                                        ESP_EVENT_ANY_ID,
+                                                        &wifi_event_handler,
+                                                        NULL,
+                                                        NULL));
+
 //     wifi_config_t wifi_config = {
 //         .ap = {
 //             .ssid = EXAMPLE_ESP_WIFI_SSID,
@@ -189,28 +201,48 @@ static void tcpClientSocket(void *pvParameters) {
 //             .channel = EXAMPLE_ESP_WIFI_CHANNEL,
 //             .password = EXAMPLE_ESP_WIFI_PASS,
 //             .max_connection = EXAMPLE_MAX_STA_CONN,
-// #ifdef CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT
-//             .authmode = WIFI_AUTH_WPA3_PSK,
-//             .sae_pwe_h2e = WPA3_SAE_PWE_BOTH,
-// #else /* CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT */
+// // #ifdef CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT
+// //             .authmode = WIFI_AUTH_WPA3_PSK,
+// //             .sae_pwe_h2e = WPA3_SAE_PWE_BOTH,
+// // #else /* CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT */
 //             .authmode = WIFI_AUTH_WPA2_PSK,
-// #endif
+// // #endif
 //             .pmf_cfg = {
 //                     .required = true,
 //             },
 //         },
 //     };
-//     if (strlen(EXAMPLE_ESP_WIFI_PASS) == 0) {
-//         wifi_config.ap.authmode = WIFI_AUTH_OPEN;
-//     }
-// 
-//     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
-//     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
-//     ESP_ERROR_CHECK(esp_wifi_start());
-// 
-//     ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
-//              EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS, EXAMPLE_ESP_WIFI_CHANNEL);
-// }
+
+
+    wifi_config_t wifi_config = {
+        .ap = {
+            .ssid = EXAMPLE_ESP_WIFI_SSID,
+            .ssid_len = strlen(EXAMPLE_ESP_WIFI_SSID),
+            .channel = EXAMPLE_ESP_WIFI_CHANNEL,
+            .password = "",
+            .max_connection = EXAMPLE_MAX_STA_CONN,
+            .authmode = WIFI_AUTH_OPEN,
+            .pmf_cfg = {
+                .required = false,
+            },
+        },
+    };
+
+
+
+
+
+    if (strlen(EXAMPLE_ESP_WIFI_PASS) == 0) {
+        wifi_config.ap.authmode = WIFI_AUTH_OPEN;
+    }
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
+             EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS, EXAMPLE_ESP_WIFI_CHANNEL);
+}
 
 static void wifiAndIpEvent(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
@@ -292,7 +324,7 @@ void wifi_init_sta(void) {
         ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
                  EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
     } else if (bits & WIFI_FAIL_BIT) {
-        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s",
+        ESP_LOGE(TAG, "Failed to connect to SSID:%s, password:%s",
                  EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
     } else {
         ESP_LOGE(TAG, "UNEXPECTED EVENT");
@@ -313,10 +345,10 @@ void initTcpClient(char *serverIp) {
     }
     ESP_ERROR_CHECK(ret);
 
-    // ESP_LOGI(TAG, "ESP_WIFI_MODE_AP");
-    // wifi_init_softap();
-    ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
-    wifi_init_sta();
+    ESP_LOGI(TAG, "ESP_WIFI_MODE_AP");
+    wifi_init_softap();
+    // ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
+    // wifi_init_sta();
 
     xStreamBufferSender = xStreamBufferCreate(STREAM_BUFFER_SIZE, STREAM_BUFFER_LENGTH_TRIGGER);
     xStreamBufferReceiver = xStreamBufferCreate(STREAM_BUFFER_SIZE, STREAM_BUFFER_LENGTH_TRIGGER);
