@@ -19,7 +19,9 @@ enum CommandsToRobot {
     COMMAND_SAVE_LOCAL_CONFIG,
     COMMAND_ARMED_ROBOT,
     COMMAND_DISARMED_ROBOT,
-    COMMAND_VIBRATION_TEST
+    COMMAND_VIBRATION_TEST,
+    COMMAND_MOVE_FORWARD,
+    COMMAND_MOVE_BACKWARD
 };
 
 // ATENCION: este enum esta emparejado con una enum class en la app, se deben modificar a la vez
@@ -70,8 +72,9 @@ enum {
  * @brief Estructura de datos de comandos recibida de la app
  */
  typedef struct {
-    uint16_t headerPackage;
-    uint16_t  command;
+    uint16_t    headerPackage;
+    uint16_t    command;
+    int16_t     value;
 } command_app_raw_t;
 
 /**
@@ -86,7 +89,11 @@ typedef struct {
     int16_t  pitch;
     int16_t  roll;
     int16_t  yaw;
-    int16_t  setPoint;
+    int16_t  posInMeters;
+    int16_t  outputYawControl;
+    int16_t  setPointAngle;
+    int16_t  setPointPos;
+    int16_t  setPointYaw;
     uint16_t centerAngle;
     uint16_t statusCode;
 } robot_dynamic_data_t;
@@ -100,6 +107,14 @@ typedef struct {
     uint16_t safetyLimits;
     pid_params_raw_t pid[CANT_PIDS];
 } robot_local_configs_comms_t;
+
+/**
+ * @brief Estructura de datos para comandos de movimiento
+ */
+typedef struct {
+    uint16_t headerPackage;
+    int16_t  distanceInMts;
+} command_move_position_t;
 
 void spp_wr_task_start_up(void);
 void spp_wr_task_shut_down(void);

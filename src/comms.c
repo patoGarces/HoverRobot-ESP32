@@ -107,7 +107,6 @@ void sendDynamicData(robot_dynamic_data_t dynamicData) {
 void sendLocalConfig(robot_local_configs_t localConfig) {
     robot_local_configs_comms_t localConfigRaw;
 
-    
     localConfigRaw.headerPackage = HEADER_PACKAGE_LOCAL_CONFIG;
     localConfigRaw.centerAngle = localConfig.centerAngle * PRECISION_DECIMALS_COMMS;
     localConfigRaw.safetyLimits = localConfig.safetyLimits * PRECISION_DECIMALS_COMMS;

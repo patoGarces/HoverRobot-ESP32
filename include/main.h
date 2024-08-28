@@ -18,7 +18,7 @@
 
 #define PRECISION_DECIMALS_COMMS    100.00              // Precision al convertir la data cruda a float, en este caso 100 = 0.01
 
-#define CANT_PIDS	3
+#define CANT_PIDS	4
 
 #if defined(HARDWARE_PROTOTYPE) && defined(HARDWARE_S3)
 #error Error hardware robot config
@@ -59,12 +59,16 @@
 #define GPIO_MPU_SDA        18
 #define GPIO_MPU_SCL        17
 
+
+#define ENABLE_POS_CONTROL      1
+
 #endif
 
 enum {              // OJO: en sync con App
     PID_ANGLE,
     PID_POS,
-    PID_SPEED
+    PID_SPEED,
+    PID_YAW
 };
 
 enum {
@@ -98,7 +102,7 @@ typedef struct {
 typedef struct {
     int16_t joyAxisX;
     int16_t joyAxisY;
-    uint16_t compassYaw;
+    int16_t compassYaw;
 } direction_control_t;
 
 /**
@@ -117,7 +121,6 @@ typedef struct {
     uint16_t                batVoltage;
     uint16_t                batPercent;
     uint16_t                tempImu;
-    // uint16_t                 tempEscs;
     int16_t                 speedR;
     int16_t                 speedL;
     float                   pitch;
@@ -128,6 +131,7 @@ typedef struct {
     float                   posInMetersR;
     float                   posInMetersL;
     float                   distanceInCms;
+    float                   outputYawControl;
     direction_control_t     dirControl;
     robot_local_configs_t   localConfig;
     uint16_t                statusCode;

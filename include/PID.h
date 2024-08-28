@@ -62,5 +62,10 @@ float pidGetSetPoint(uint8_t numPid);
  */
 void pidSetConstants(uint8_t numPid,float KP, float KI, float KD);
 
+/*
+ * 	Funcion para limpiar los terminos acumulativos del PID
+ */
+void pidClearTerms(uint8_t numPid);
+
 
 #endif

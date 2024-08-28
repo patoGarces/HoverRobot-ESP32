@@ -102,3 +102,8 @@ void pidSetConstants(uint8_t numPid,float KP, float KI, float KD) {
     pidControl[numPid].iTerm = 0.00;
     pidControl[numPid].lastInput = 0.00;
 }
+
+void pidClearTerms(uint8_t numPid) {
+    pidControl[numPid].iTerm = 0.00;
+    pidControl[numPid].lastInput = 0.00;
+}
