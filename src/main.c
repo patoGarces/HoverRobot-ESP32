@@ -66,6 +66,35 @@ float pos2mts(int32_t steps) {
     return (steps/90.00) * 0.5310707511;                  // 90 steps por vuelta, distancia recorrida por vuelta: diam 17cm * pi = 53.10707 cms = 0.5310707511 mts
 }
 
+/*
+  * Calculo error circular para el yaw, donde hay una discontinuidad entre -180 y 180, ya que en realidad ese salto no es tal.
+*/
+
+// ejemplo: setpoint = 179              // TODO: borrar
+//         actualValue = -175
+
+//         error = 179-(-175) =  354
+//         error > 180 => error = error-360
+//         return 354-360 = -6
+float angularDistance(float setPoint,float actualValue) {
+
+    float error = setPoint - actualValue;
+
+    if(error > 180.00) {
+        error -= 360.00;
+        // ESP_LOGI("CircularError","Error: %f > 180.00",error);
+    }
+    else if(error < -180.00) {
+        error += 360.00;
+        // ESP_LOGI("CircularError","Error: %f < 180.00",error);
+    }
+    else { 
+        // ESP_LOGI("CircularError","Error: %f en rango normal",error);
+    }
+    return error;
+
+}
+
 int16_t cutSpeedRange(int16_t speed) {
     if (speed > 1000) {
         return 1000;
@@ -142,7 +171,7 @@ static void imuControlHandler(void *pvParameters) {
         
             statusRobot.roll = newAngles.roll;
             statusRobot.pitch = newAngles.pitch;
-            statusRobot.yaw = newAngles.yaw;
+            statusRobot.yaw = newAngles.yaw * -1.00;
             statusRobot.tempImu = (uint16_t)newAngles.temp * 10;
 
             angleReference = newAngles.pitch;
@@ -200,7 +229,7 @@ static void imuControlHandler(void *pvParameters) {
 
 static void attitudeControl(void *pvParameters){
     float outputPosControl = 0.00;
-    uint8_t controlManualYaw = false;
+    uint8_t disableManualControlYaw = false;
 
     while(true) {
 
@@ -208,19 +237,29 @@ static void attitudeControl(void *pvParameters){
         if (statusRobot.statusCode == STATUS_ROBOT_STABILIZED) {
 
             if (!statusRobot.dirControl.joyAxisX) {     // Yaw control
-                if (controlManualYaw) { 
-                    attitudeControlStat.setPointYaw = statusRobot.yaw / 1.8;
+                if (!disableManualControlYaw) { 
+                    attitudeControlStat.setPointYaw = statusRobot.yaw;
                     statusRobot.localConfig.pids[PID_YAW].setPoint = attitudeControlStat.setPointYaw;
-                    pidSetSetPoint(PID_YAW, attitudeControlStat.setPointYaw);
+                    // pidSetSetPoint(PID_YAW, attitudeControlStat.setPointYaw / 1.8);
+
+                    pidSetSetPoint(PID_YAW, 0);
+
                     pidSetEnable(PID_YAW);
-                    controlManualYaw = false;
+                    disableManualControlYaw = true;
                 }
-                statusRobot.outputYawControl = pidCalculate(PID_YAW,statusRobot.yaw / 1.8);
+
+                float angularDist = angularDistance(attitudeControlStat.setPointYaw,statusRobot.yaw);
+                float absDesiredYaw = angularDist + statusRobot.yaw;
+                
+                statusRobot.outputYawControl = pidCalculate(PID_YAW,angularDist / 1.8);
+
+                ESP_LOGI("circular error","error circular: %f,\t setPoint: %f,\tActualYaw: %f\toutput: %f\t desired: %f",angularDist,attitudeControlStat.setPointYaw,statusRobot.yaw,statusRobot.outputYawControl,absDesiredYaw);
+
                 attitudeControlMotor.motorR = statusRobot.outputYawControl * MAX_ROTATION_RATE_CONTROL;
                 attitudeControlMotor.motorL = attitudeControlMotor.motorR * -1;
             }
             else {
-                controlManualYaw = true;
+                disableManualControlYaw = false;
                 pidSetDisable(PID_YAW);
                 // Yaw manual control
                 attitudeControlMotor.motorR = (statusRobot.dirControl.joyAxisX / 100.00) * MAX_ROTATION_RATE_CONTROL;
@@ -253,6 +292,11 @@ static void attitudeControl(void *pvParameters){
                     outputPosControl = (statusRobot.dirControl.joyAxisY / 100.00) * MAX_ANGLE_JOYSTICK;
                 }
             // #endif
+        }
+        else {
+            if (disableManualControlYaw) {
+                disableManualControlYaw = false;
+            }
         }
         #endif
 
