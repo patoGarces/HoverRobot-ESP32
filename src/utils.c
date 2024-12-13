@@ -26,7 +26,7 @@ pid_floats_t convertPidRawToFloats(pid_params_raw_t pidRaw) {
 */
 robot_local_configs_raw_t convertLocalConfigToRaw(robot_local_configs_t localConfig) {
 
-    pid_params_raw_t pids[3];
+    pid_params_raw_t pids[CANT_PIDS];
     for (uint8_t i=0;i<CANT_PIDS;i++) {
         pids[i] = convertPidFloatsToRaw(localConfig.pids[i]);
     }
@@ -45,7 +45,7 @@ robot_local_configs_raw_t convertLocalConfigToRaw(robot_local_configs_t localCon
 */
 robot_local_configs_t convertLocalConfigToFloat(robot_local_configs_raw_t rawConfig) {
 
-    pid_floats_t pids[3];
+    pid_floats_t pids[CANT_PIDS];
     for (uint8_t i=0;i<CANT_PIDS;i++) {
         pids[i] = convertPidRawToFloats(rawConfig.pids[i]);
     }

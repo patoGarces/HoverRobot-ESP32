@@ -4,8 +4,8 @@
 
 // PARA DETECTAR EL ESP32S3: CONFIG_IDF_TARGET_ESP32S3
 
-// #define HARDWARE_PROTOTYPE
-#define HARDWARE_S3
+#define HARDWARE_PROTOTYPE
+// #define HARDWARE_S3
 
 #define PERIOD_IMU_MS           100
 #define MPU_HANDLER_PRIORITY    5//configMAX_PRIORITIES - 1
@@ -43,6 +43,9 @@
 #define GPIO_MOT_ENABLE     14
 #define GPIO_MOT_MICRO_STEP 12
 
+#define STEPS_PER_REV       6400.00                 // 200 steps * 1/32 microsteps = 6400 pulsos por vuelta
+#define DIST_PER_REV        0.314159265358          // diam 10cm * pi = 31.4159265358 cms = 0.314159265358 mts
+
 #elif defined(HARDWARE_S3)
 
 #define DEVICE_BT_NAME          "Balancing robot S3"
@@ -59,6 +62,8 @@
 #define GPIO_MPU_SDA        18
 #define GPIO_MPU_SCL        17
 
+#define STEPS_PER_REV       90.00                   // 90 steps por vuelta
+#define DIST_PER_REV        0.5310707511            // diam 17cm * pi = 53.10707 cms = 0.5310707511 mts
 
 #define ENABLE_POS_CONTROL      1
 

@@ -66,14 +66,12 @@ int sock = 0;   // TODO: sacar de aca
 static void tcpClientReceiver(void *pvParameters)
 {
     char rx_buffer[128];
-    char host_ip[] = HOST_IP_ADDR;
 
     while (true) {
 
         int len = recv(sock, rx_buffer, sizeof(rx_buffer) - 1, 0);
    
         if (len > 0) {
-            // ESP_LOGI(TAG, "Received %d bytes from %s", len, host_ip);
             xStreamBufferSend(xStreamBufferReceiver,rx_buffer,len,1);               // TODO: rompio en pruebas, stacktrace: 0x40376c32:0x3fcbe630 0x4037d395:0x3fcbe650 0x40384ad5:0x3fcbe670 0x40380161:0x3fcbe790 0x4038020d:0x3fcbe7b0 0x40380499:0x3fcbe7e0 0x42004c96:0x3fcbe820 0x403805dd:0x3fcbe8d0
             
         }

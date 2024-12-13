@@ -75,13 +75,13 @@ void mpu6050Handler(void*){
 
 			// printf("pitch: %f\n",newData.pitch);
 
-			// if (contMeasure < 2500) {						// wait to stabilize measuments
-			// 	contMeasure++;
-			// }
-			// else {
+			if (contMeasure < 1000) { // 2500) {						// wait to stabilize measuments
+				contMeasure++;
+			}
+			else {
 				// printf("pitch: %f\n",newData.pitch);
             	xQueueSend(mpu6050QueueHandler,(void *) &newData, 1);
-			// }
+			}
 	    }
 
 	    //Best result is to match with DMP refresh rate

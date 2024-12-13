@@ -59,9 +59,10 @@
         "tcp_client.h": "c",
         "err.h": "c",
         "math.h": "c",
-        "utils.h": "c"
+        "utils.h": "c",
+        "cmath": "c"
     },
-    "idf.portWin": "COM13",
+    "idf.portWin": "COM12",
     "idf.adapterTargetName": "esp32s3",
     "idf.openOcdConfigs": [
         "interface/ftdi/esp32_devkitj_v1.cfg",
