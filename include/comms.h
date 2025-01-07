@@ -21,7 +21,8 @@ enum CommandsToRobot {
     COMMAND_DISARMED_ROBOT,
     COMMAND_VIBRATION_TEST,
     COMMAND_MOVE_FORWARD,
-    COMMAND_MOVE_BACKWARD
+    COMMAND_MOVE_BACKWARD,
+    COMMAND_MOVE_YAW
 };
 
 // ATENCION: este enum esta emparejado con una enum class en la app, se deben modificar a la vez
@@ -65,7 +66,6 @@ enum {
     uint16_t headerPackage;
     int16_t  axisX;
     int16_t  axisY;
-    uint16_t compassYaw;
 } control_app_raw_t;
 
 /**

@@ -44,7 +44,7 @@
 #define GPIO_MOT_MICRO_STEP 12
 
 #define STEPS_PER_REV       6400.00                 // 200 steps * 1/32 microsteps = 6400 pulsos por vuelta
-#define DIST_PER_REV        0.314159265358          // diam 10cm * pi = 31.4159265358 cms = 0.314159265358 mts
+#define DIST_PER_REV        0.326725635973          // diam 0.104m * pi = 0,326725635973 mts
 
 #elif defined(HARDWARE_S3)
 
@@ -88,15 +88,6 @@ typedef struct {
     uint8_t enable;
 } output_motors_t;
 
-// typedef struct {
-//     uint8_t indexPid;
-//     float kp;
-//     float ki;
-//     float kd;
-//     float centerAngle;
-//     float safetyLimits;
-// } pid_params_t;
-
 typedef struct {
     float kp;
     float ki;
@@ -107,7 +98,6 @@ typedef struct {
 typedef struct {
     int16_t joyAxisX;
     int16_t joyAxisY;
-    int16_t compassYaw;
 } direction_control_t;
 
 /**
@@ -128,14 +118,14 @@ typedef struct {
     uint16_t                tempImu;
     int16_t                 speedR;
     int16_t                 speedL;
-    float                   pitch;
-    float                   roll;
-    float                   yaw;
+    float                   actualPitch;
+    float                   actualRoll;
+    float                   actualYaw;
     int16_t                 speedMeasR;
     int16_t                 speedMeasL;
     float                   posInMetersR;
     float                   posInMetersL;
-    float                   distanceInCms;
+    float                   actualDistInCms;
     float                   outputYawControl;
     direction_control_t     dirControl;
     robot_local_configs_t   localConfig;

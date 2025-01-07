@@ -9,8 +9,8 @@
 
 #include "../include/main.h"
 #include "esp_log.h"
-#include "driver/pcnt.h"
-// #include "driver/pulse_cnt.h" // TODO: migrar
+// #include "driver/pcnt.h"
+#include "driver/pulse_cnt.h" // TODO: migrar
 
 #include "soc/gpio_sig_map.h"
 
@@ -35,7 +35,10 @@
 #define CHANNEL_MOT_L       LEDC_CHANNEL_0
 #define CHANNEL_MOT_R       LEDC_CHANNEL_1
 
-// pcnt_unit_handle_t pcnt_unit = NULL;
+pcnt_unit_handle_t pcntUnitL = NULL;
+pcnt_unit_handle_t pcntUnitR = NULL;
+
+char *TAG = "PULSE CNT INT";
 
 extern QueueHandle_t motorControlQueueHandler; 
 static stepper_config_t configInit;
@@ -62,122 +65,90 @@ static void controlHandler(void *pvParameters) {
             setEnableMotors(newVel.enable);                         // TODO: esto se va a llamar continuamente
         }
 
-        int16_t posL = 0,posR = 0;
-        pcnt_get_counter_value(PCNT_UNIT_0,&posL);
-        pcnt_get_counter_value(PCNT_UNIT_1,&posR);
-
-        motorsMeasurements.absPosL = posL;
-        motorsMeasurements.absPosR = posR;
-
-        // ESP_ERROR_CHECK(pcnt_unit_get_count(pcnt_unit, &posL)); // TODO: migrar
+        // ESP_ERROR_CHECK(pcnt_unit_get_count(pcntUnitL, &motorsMeasurements.absPosL));
+        // ESP_ERROR_CHECK(pcnt_unit_get_count(pcntUnitR, &motorsMeasurements.absPosR));
         // ESP_LOGE("PCNT PRUEBAS","posL: %d,\tposR: %d",posL,posR);
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
+static bool positionReachLimitsL(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t *edata, void *user_ctx) {
+    if (edata->watch_point_value == LOW_LIMIT_PCNT) {
+        motorsMeasurements.absPosL -= 100;
+    }
+    else if (edata->watch_point_value == HIGH_LIMIT_PCNT) {
+        motorsMeasurements.absPosL += 100;
+    }
+    return false; // TODO: revisar esto
+}
+
+static bool positionReachLimitsR(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t *edata, void *user_ctx) {
+    if (edata->watch_point_value == LOW_LIMIT_PCNT) {
+        motorsMeasurements.absPosR -= 100;
+    }
+    else if (edata->watch_point_value == HIGH_LIMIT_PCNT) {
+        motorsMeasurements.absPosR += 100;
+    }
+    return false; // TODO: revisar esto
+}
+
 static void initPositionSensor() {
-
-    // TODO: migrar a pulse cnt
-    // pcnt_unit_config_t unit_config = {
-    //     .high_limit = 100,
-    //     .low_limit = -100,
-    // };
-
-    // ESP_ERROR_CHECK(pcnt_new_unit(&unit_config, &pcnt_unit));
-
-    // ESP_LOGE(TAG, "set glitch filter");
-    // pcnt_glitch_filter_config_t filter_config = {
-    //     .max_glitch_ns = 1000,
-    // };
-    // ESP_ERROR_CHECK(pcnt_unit_set_glitch_filter(pcnt_unit, &filter_config));
-
-    // ESP_LOGE(TAG, "install pcnt channels");
-    // pcnt_chan_config_t chan_a_config = {
-    //     .edge_gpio_num = configInit.gpio_mot_l_step,
-    //     .level_gpio_num = configInit.gpio_mot_l_dir,
-    // };
-    // pcnt_channel_handle_t pcnt_chan_a = NULL;
-    // ESP_ERROR_CHECK(pcnt_new_channel(pcnt_unit, &chan_a_config, &pcnt_chan_a));
-
-    // ESP_LOGE(TAG, "set edge and level actions for pcnt channels");
-    // ESP_ERROR_CHECK(pcnt_channel_set_edge_action(pcnt_chan_a, PCNT_CHANNEL_EDGE_ACTION_DECREASE, PCNT_CHANNEL_EDGE_ACTION_HOLD));
-    // ESP_ERROR_CHECK(pcnt_channel_set_level_action(pcnt_chan_a, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE));
-
-    // // ESP_LOGE(TAG, "add watch points and register callbacks");
-    // // int watch_points[] = {EXAMPLE_PCNT_LOW_LIMIT, -50, 0, 50, EXAMPLE_PCNT_HIGH_LIMIT};
-    // // for (size_t i = 0; i < sizeof(watch_points) / sizeof(watch_points[0]); i++) {
-    // //     ESP_ERROR_CHECK(pcnt_unit_add_watch_point(pcnt_unit, watch_points[i]));
-    // // }
-    // // pcnt_event_callbacks_t cbs = {
-    // //     .on_reach = example_pcnt_on_reach,
-    // // };
-    // // QueueHandle_t queue = xQueueCreate(10, sizeof(int));
-    // // ESP_ERROR_CHECK(pcnt_unit_register_event_callbacks(pcnt_unit, &cbs, queue));
-
-    // ESP_LOGE(TAG, "enable pcnt unit");
-    // ESP_ERROR_CHECK(pcnt_unit_enable(pcnt_unit));
-    // ESP_LOGE(TAG, "clear pcnt unit");
-    // ESP_ERROR_CHECK(pcnt_unit_clear_count(pcnt_unit));
-    // ESP_LOGE(TAG, "start pcnt unit");
-    // ESP_ERROR_CHECK(pcnt_unit_start(pcnt_unit))
-
-    // pcnt_unit_config_t pcntConfig = {
-    //     .low_limit = -100,
-    //     .high_limit = 100,
-    //     .flags.accum_count = 10,
-    //     .intr_priority = 0
-    // };
-    // ESP_ERROR_CHECK(pcnt_new_unit(&pcntConfig, &pcnt_unit));
-
-    // pcnt_chan_config_t pcntChannelConfig = {
-    //     .edge_gpio_num = configInit.gpio_mot_l_step,
-    //     .level_gpio_num = configInit.gpio_mot_l_dir,
-        
-    // };
-    // pcnt_channel_handle_t pcnt_chan = NULL;
-    // pcnt_new_channel(pcnt_unit, &pcntChannelConfig, &pcnt_chan);
-
-    // ESP_ERROR_CHECK(pcnt_channel_set_level_action(pcnt_chan, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE));
-
-    // // watchpoints: 
-    // // ESP_ERROR_CHECK(pcnt_unit_add_watch_point(pcnt_unit, EXAMPLE_PCNT_HIGH_LIMIT));
-
-    // pcnt_unit_enable(pcnt_unit);
-    // pcnt_unit_start(pcnt_unit);
-    
-    pcnt_config_t pcntConfig = {
-        .pulse_gpio_num = configInit.gpio_mot_l_step,
-        .ctrl_gpio_num = configInit.gpio_mot_l_dir,
-        .channel = PCNT_CHANNEL_0,
-        .unit = PCNT_UNIT_0,
-        .pos_mode = PCNT_COUNT_INC,         // Contar flancos positivos
-        .neg_mode = PCNT_COUNT_DIS,         // Ignorar flancos negativos
-        .lctrl_mode = PCNT_CHANNEL_LEVEL_ACTION_KEEP,
-        .hctrl_mode = PCNT_CHANNEL_LEVEL_ACTION_INVERSE,
-        .counter_h_lim = 32000,
-        .counter_l_lim = -32000,
+    pcnt_unit_config_t unit_config = {
+        .high_limit = HIGH_LIMIT_PCNT,
+        .low_limit = LOW_LIMIT_PCNT,
     };
-    // Configuro pcnt para motor L
-    pcnt_unit_config(&pcntConfig);
 
-    // Configuro pcnt para motor R
-    pcntConfig.pulse_gpio_num = configInit.gpio_mot_r_step,
-    pcntConfig.ctrl_gpio_num = configInit.gpio_mot_r_dir,
-    pcntConfig.unit = PCNT_UNIT_1,
-    pcnt_unit_config(&pcntConfig);
+    ESP_ERROR_CHECK(pcnt_new_unit(&unit_config, &pcntUnitL));
+    ESP_ERROR_CHECK(pcnt_new_unit(&unit_config, &pcntUnitR));
+
+    pcnt_glitch_filter_config_t filter_config = {
+        .max_glitch_ns = 1000,
+    };
+    ESP_ERROR_CHECK(pcnt_unit_set_glitch_filter(pcntUnitL, &filter_config));
+    ESP_ERROR_CHECK(pcnt_unit_set_glitch_filter(pcntUnitR, &filter_config));
+
+    pcnt_chan_config_t configChannelL = {
+        .edge_gpio_num = configInit.gpio_mot_l_step,
+        .level_gpio_num = configInit.gpio_mot_l_dir,
+    };
+    pcnt_chan_config_t configChannelR = {
+        .edge_gpio_num = configInit.gpio_mot_r_step,
+        .level_gpio_num = configInit.gpio_mot_r_dir,
+    };
+    pcnt_channel_handle_t pcntChannelL = NULL;
+    pcnt_channel_handle_t pcntChannelR = NULL;
+    ESP_ERROR_CHECK(pcnt_new_channel(pcntUnitL, &configChannelL, &pcntChannelL));
+    ESP_ERROR_CHECK(pcnt_new_channel(pcntUnitR, &configChannelR, &pcntChannelR));
+
+    ESP_ERROR_CHECK(pcnt_channel_set_edge_action(pcntChannelL, PCNT_CHANNEL_EDGE_ACTION_DECREASE, PCNT_CHANNEL_EDGE_ACTION_HOLD));
+    ESP_ERROR_CHECK(pcnt_channel_set_level_action(pcntChannelL, PCNT_CHANNEL_LEVEL_ACTION_INVERSE, PCNT_CHANNEL_LEVEL_ACTION_KEEP));
+    ESP_ERROR_CHECK(pcnt_channel_set_edge_action(pcntChannelR, PCNT_CHANNEL_EDGE_ACTION_DECREASE, PCNT_CHANNEL_EDGE_ACTION_HOLD));
+    ESP_ERROR_CHECK(pcnt_channel_set_level_action(pcntChannelR, PCNT_CHANNEL_LEVEL_ACTION_INVERSE, PCNT_CHANNEL_LEVEL_ACTION_KEEP));
+
+    ESP_ERROR_CHECK(pcnt_unit_add_watch_point(pcntUnitL, unit_config.low_limit));
+    ESP_ERROR_CHECK(pcnt_unit_add_watch_point(pcntUnitL, unit_config.high_limit));
+    ESP_ERROR_CHECK(pcnt_unit_add_watch_point(pcntUnitR, unit_config.low_limit));
+    ESP_ERROR_CHECK(pcnt_unit_add_watch_point(pcntUnitR, unit_config.high_limit));
+
+    pcnt_event_callbacks_t callbackReach = {
+        .on_reach = positionReachLimitsL,
+    };
+    ESP_ERROR_CHECK(pcnt_unit_register_event_callbacks(pcntUnitL, &callbackReach, NULL));
+    callbackReach.on_reach = positionReachLimitsR;
+    ESP_ERROR_CHECK(pcnt_unit_register_event_callbacks(pcntUnitR, &callbackReach, NULL));
+
+    ESP_ERROR_CHECK(pcnt_unit_enable(pcntUnitL));
+    ESP_ERROR_CHECK(pcnt_unit_enable(pcntUnitR));
+    ESP_ERROR_CHECK(pcnt_unit_clear_count(pcntUnitL));
+    ESP_ERROR_CHECK(pcnt_unit_clear_count(pcntUnitR));
+    ESP_ERROR_CHECK(pcnt_unit_start(pcntUnitL));
+    ESP_ERROR_CHECK(pcnt_unit_start(pcntUnitR));
 
     esp_rom_gpio_connect_out_signal(configInit.gpio_mot_l_step, LEDC_LS_SIG_OUT0_IDX, false,false);
     esp_rom_gpio_connect_out_signal(configInit.gpio_mot_l_dir, SIG_GPIO_OUT_IDX, false,false);
 
     esp_rom_gpio_connect_out_signal(configInit.gpio_mot_r_step, LEDC_LS_SIG_OUT1_IDX, false,false);
     esp_rom_gpio_connect_out_signal(configInit.gpio_mot_r_dir, SIG_GPIO_OUT_IDX, false,false);
-
-    pcnt_counter_pause(PCNT_UNIT_0);
-    pcnt_counter_clear(PCNT_UNIT_0);
-    pcnt_counter_resume(PCNT_UNIT_0);
-    pcnt_counter_pause(PCNT_UNIT_1);
-    pcnt_counter_clear(PCNT_UNIT_1);
-    pcnt_counter_resume(PCNT_UNIT_1);
 }
 
 static void initPulseGenerator() {

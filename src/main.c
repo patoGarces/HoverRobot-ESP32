@@ -33,9 +33,9 @@
     #define MAX_ANGLE_POS_CONTROL       15.0
     #define MAX_ROTATION_RATE_CONTROL   25.0
 #else
-    #define MAX_ANGLE_JOYSTICK      8.0
+    #define MAX_ANGLE_JOYSTICK          8.0
     #define MAX_ANGLE_POS_CONTROL       15.0
-    #define MAX_ROTATION_RATE_CONTROL         100
+    #define MAX_ROTATION_RATE_CONTROL   100
 #endif
 
 extern QueueHandle_t mpu6050QueueHandler;                   // Recibo nuevos angulos obtenidos del MPU
@@ -51,14 +51,14 @@ output_motors_t attitudeControlMotor;
 
 struct {
     uint8_t attMode;
-    float   setPointPosCms;
-    float   setPointVel;
+    float   setPointPosCms; 
+    // float   setPointVel;
     float   setPointYaw;
     uint8_t contSafetyMaxSpeed;
 } attitudeControlStat = {
     .attMode = ATT_MODE_ATTI,
     .setPointPosCms = 0.00,
-    .setPointVel = 0.00,
+    // .setPointVel = 0.00,
     .setPointYaw = 0.00,
 };
 
@@ -67,32 +67,19 @@ float pos2mts(int32_t steps) {
 }
 
 /*
-  * Calculo error circular para el yaw, donde hay una discontinuidad entre -180 y 180, ya que en realidad ese salto no es tal.
+  * Calculo de distancia angular para el yaw, donde hay una discontinuidad entre -180 y 180, ya que en realidad ese salto no es tal.
 */
-
-// ejemplo: setpoint = 179              // TODO: borrar
-//         actualValue = -175
-
-//         error = 179-(-175) =  354
-//         error > 180 => error = error-360
-//         return 354-360 = -6
 float angularDistance(float setPoint,float actualValue) {
 
     float error = setPoint - actualValue;
 
     if(error > 180.00) {
         error -= 360.00;
-        // ESP_LOGI("CircularError","Error: %f > 180.00",error);
     }
     else if(error < -180.00) {
         error += 360.00;
-        // ESP_LOGI("CircularError","Error: %f < 180.00",error);
     }
-    else { 
-        // ESP_LOGI("CircularError","Error: %f en rango normal",error);
-    }
-    return error;
-
+    return error + setPoint;
 }
 
 int16_t cutSpeedRange(int16_t speed) {
@@ -113,7 +100,6 @@ int16_t cutSpeedRange(int16_t speed) {
 
 void setStatusRobot(uint8_t newStatus) {
     const char *TAG = "StatusRobot";
-
     
     switch(newStatus) {
         case STATUS_ROBOT_STABILIZED:
@@ -169,15 +155,12 @@ static void imuControlHandler(void *pvParameters) {
     while(1) {
         if(xQueueReceive(mpu6050QueueHandler,&newAngles,pdMS_TO_TICKS(10))) {
         
-            statusRobot.roll = newAngles.roll;
-            statusRobot.pitch = newAngles.pitch;
-            statusRobot.yaw = newAngles.yaw * -1.00;
+            statusRobot.actualRoll = newAngles.roll;
+            statusRobot.actualPitch = newAngles.pitch;
+            statusRobot.actualYaw = newAngles.yaw * -1.00;
             statusRobot.tempImu = (uint16_t)newAngles.temp * 10;
 
             angleReference = newAngles.pitch;
-
-            // printf("pitch: %f\troll: %f\n",newAngles.pitch,newAngles.roll);
-            
             int16_t outputPidMotors = (uint16_t)(pidCalculate(PID_ANGLE,angleReference) * MAX_VELOCITY); 
 
             speedMotors.motorL = cutSpeedRange(outputPidMotors + attitudeControlMotor.motorL);
@@ -229,36 +212,29 @@ static void imuControlHandler(void *pvParameters) {
 
 static void attitudeControl(void *pvParameters){
     float outputPosControl = 0.00;
-    uint8_t disableManualControlYaw = false;
+    uint8_t isYawControlEnabled = false;
 
     while(true) {
 
         if (statusRobot.statusCode == STATUS_ROBOT_STABILIZED) {
 
             if (!statusRobot.dirControl.joyAxisX) {     // Yaw control
-                if (!disableManualControlYaw) { 
-                    attitudeControlStat.setPointYaw = statusRobot.yaw;
+                if (!isYawControlEnabled) { 
+                    attitudeControlStat.setPointYaw = statusRobot.actualYaw;
                     statusRobot.localConfig.pids[PID_YAW].setPoint = attitudeControlStat.setPointYaw;
-                    
-                    // pidSetSetPoint(PID_YAW, attitudeControlStat.setPointYaw / 1.8);
-                    pidSetSetPoint(PID_YAW, 0);
-
+                    pidSetSetPoint(PID_YAW, attitudeControlStat.setPointYaw / 1.8);
                     pidSetEnable(PID_YAW);
-                    disableManualControlYaw = true;
+                    isYawControlEnabled = true;
+                    ESP_LOGI("AttitudeControl","Enable YAW_CONTROL, sp: %f",attitudeControlStat.setPointYaw);
                 }
 
-                float angularDist = angularDistance(attitudeControlStat.setPointYaw,statusRobot.yaw);
-                float absDesiredYaw = angularDist + statusRobot.yaw;
-                
+                float angularDist = angularDistance(attitudeControlStat.setPointYaw,statusRobot.actualYaw);
                 statusRobot.outputYawControl = pidCalculate(PID_YAW,angularDist / 1.8);
-
-                // ESP_LOGI("circular error","error circular: %f,\t setPoint: %f,\tActualYaw: %f\toutput: %f\t desired: %f",angularDist,attitudeControlStat.setPointYaw,statusRobot.yaw,statusRobot.outputYawControl,absDesiredYaw);
-
                 attitudeControlMotor.motorR = statusRobot.outputYawControl * MAX_ROTATION_RATE_CONTROL;
                 attitudeControlMotor.motorL = attitudeControlMotor.motorR * -1;
             }
             else {
-                disableManualControlYaw = false;
+                isYawControlEnabled = false;
                 pidSetDisable(PID_YAW);
                 // Yaw manual control
                 attitudeControlMotor.motorR = (statusRobot.dirControl.joyAxisX / 100.00) * MAX_ROTATION_RATE_CONTROL;
@@ -266,28 +242,21 @@ static void attitudeControl(void *pvParameters){
             }
             
             if (!statusRobot.dirControl.joyAxisY) {     // Pos control
-
-                // #ifdef HARDWARE_S3
-                // #ifdef ENABLE_POS_CONTROL
-                statusRobot.distanceInCms = ((statusRobot.posInMetersL + statusRobot.posInMetersR) / 2) * 100.00;
+                statusRobot.actualDistInCms = ((statusRobot.posInMetersL + statusRobot.posInMetersR) / 2) * 100.00;
 
                 if (attitudeControlStat.attMode != ATT_MODE_POS_CONTROL) {
-                    attitudeControlStat.setPointPosCms = statusRobot.distanceInCms;
+                    attitudeControlStat.setPointPosCms = statusRobot.actualDistInCms;
                     statusRobot.localConfig.pids[PID_POS].setPoint = attitudeControlStat.setPointPosCms;
                     pidSetSetPoint(PID_POS,attitudeControlStat.setPointPosCms);
                     pidSetEnable(PID_POS);
                     outputPosControl = 0;
                     pidClearTerms(PID_POS);
                     attitudeControlStat.attMode = ATT_MODE_POS_CONTROL;
-
                     ESP_LOGI("AttitudeControl","Enable POS_CONTROL");
                 }
                 else {
-                    outputPosControl = pidCalculate(PID_POS,statusRobot.distanceInCms) * MAX_ANGLE_POS_CONTROL; 
+                    outputPosControl = pidCalculate(PID_POS,statusRobot.actualDistInCms) * MAX_ANGLE_POS_CONTROL; 
                 }
-                // #else
-                //     outputPosControl = 0;
-                // #endif
             }
             else {
                 attitudeControlStat.attMode = ATT_MODE_ATTI;            // TODO: deberia switchear aca a modo control de velocidad
@@ -296,8 +265,8 @@ static void attitudeControl(void *pvParameters){
             }
         }
         else {
-            if (disableManualControlYaw) {
-                disableManualControlYaw = false;
+            if (isYawControlEnabled) {
+                isYawControlEnabled = false;
             }
         }
 
@@ -308,12 +277,6 @@ static void attitudeControl(void *pvParameters){
         // printf(">inPos:%f\n>spPos:%f\n>spPos2:%f\n>outPos:%f\n",statusRobot.distanceInCms,attitudeControlStat.setPointPosCms,pidGetSetPoint(PID_POS)*100,outputPosControl);
         // PID ANGLE
         // printf(">inAngle:%f\n>spAngle:%f\n>outAngle:%d\n",statusRobot.pitch,statusRobot.localConfig.pids[PID_ANGLE].setPoint,statusRobot.speedL);
-
-        // printf(">Mot:%d\n>measMot:%d\n",statusRobot.speedL,statusRobot.speedMeasL);
-
-        // printf("distance: %f\tsetPoint: %f\n",distanceInCms,attitudeControlStat.setPointPosCms);
-
-        // printf(">inYaw:%f\n>spYaw:%f\n>outYaw:%d\n",statusRobot.yaw/1.8,150/1.8,attitudeControlMotor.motorR);
         vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
@@ -336,15 +299,6 @@ static void commsManager(void *pvParameters) {
         if (xQueueReceive(receiveControlQueueHandler,&newControl,0)) {
             statusRobot.dirControl.joyAxisX = newControl.axisX;
             statusRobot.dirControl.joyAxisY = newControl.axisY;
-
-            if (newControl.compassYaw <= 360) {
-                int16_t yawAngle = newControl.compassYaw;
-                if (newControl.compassYaw > 180) { 
-                    yawAngle -= 360;
-                }
-                statusRobot.dirControl.compassYaw = yawAngle;    
-                pidSetSetPoint(PID_YAW, yawAngle/1.8);
-            }
         }
         
         if(xQueueReceive(newPidParamsQueueHandler,&newPidSettings,0)) {
@@ -377,16 +331,24 @@ static void commsManager(void *pvParameters) {
 
                 case COMMAND_MOVE_FORWARD:
                     ESP_LOGI(TAG,"Move forward command, distance: %f",newCommand.value / PRECISION_DECIMALS_COMMS);
-                    attitudeControlStat.setPointPosCms = statusRobot.distanceInCms + newCommand.value;
+                    attitudeControlStat.setPointPosCms = statusRobot.actualDistInCms + newCommand.value;
                     statusRobot.localConfig.pids[PID_POS].setPoint = attitudeControlStat.setPointPosCms;
                     pidSetSetPoint(PID_POS,attitudeControlStat.setPointPosCms);
                 break;
 
                 case COMMAND_MOVE_BACKWARD:
                     ESP_LOGI(TAG,"Move backward command, distance: %f",newCommand.value / PRECISION_DECIMALS_COMMS);
-                    attitudeControlStat.setPointPosCms = statusRobot.distanceInCms - newCommand.value;
+                    attitudeControlStat.setPointPosCms = statusRobot.actualDistInCms - newCommand.value;
                     statusRobot.localConfig.pids[PID_POS].setPoint = attitudeControlStat.setPointPosCms;
                     pidSetSetPoint(PID_POS,attitudeControlStat.setPointPosCms);
+                break;
+
+                 case COMMAND_MOVE_YAW:
+                    float yawAngle = newCommand.value / PRECISION_DECIMALS_COMMS;
+                    ESP_LOGI(TAG,"Move yaw command, angle: %f",yawAngle);
+                    attitudeControlStat.setPointYaw = yawAngle;
+                    statusRobot.localConfig.pids[PID_YAW].setPoint = attitudeControlStat.setPointYaw;
+                    pidSetSetPoint(PID_YAW, attitudeControlStat.setPointYaw / 1.8);
                 break;
             }            
         }
@@ -399,19 +361,13 @@ static void commsManager(void *pvParameters) {
                 statusRobot.speedMeasL = receiveMcb.speedL_meas;
                 statusRobot.posInMetersR = pos2mts(receiveMcb.posR);
                 statusRobot.posInMetersL = pos2mts(receiveMcb.posL * -1);
-
-                // float distance = statusRobot.posInMetersL * 100.00;
-                // printf(">posLf:%f\n>posL:%ld\n",statusRobot.posInMetersL,receiveMcb.posL * -1);
-                // statusRobot.setPoint; 
             }
         #elif defined(HARDWARE_PROTOTYPE)
             motors_measurements_t newMeasureMotors = getMeasMotors();
             statusRobot.speedMeasR = newMeasureMotors.speedMotR;
             statusRobot.speedMeasL = newMeasureMotors.speedMotL;
             statusRobot.posInMetersR = pos2mts(newMeasureMotors.absPosR);
-            statusRobot.posInMetersL = pos2mts(newMeasureMotors.absPosL * -1);
-
-            ESP_LOGE(TAG,"posInMtsL: %f",statusRobot.posInMetersL);
+            statusRobot.posInMetersL = pos2mts(newMeasureMotors.absPosL);
         #endif
 
         if (isTcpClientConnected()) {
@@ -425,9 +381,9 @@ static void commsManager(void *pvParameters) {
                 .imuTemp = statusRobot.tempImu,
                 .speedR = statusRobot.speedR,
                 .speedL = statusRobot.speedL,
-                .pitch =  statusRobot.pitch * PRECISION_DECIMALS_COMMS,
-                .roll = statusRobot.roll * PRECISION_DECIMALS_COMMS,
-                .yaw = statusRobot.yaw * PRECISION_DECIMALS_COMMS,
+                .pitch =  statusRobot.actualPitch * PRECISION_DECIMALS_COMMS,
+                .roll = statusRobot.actualRoll * PRECISION_DECIMALS_COMMS,
+                .yaw = statusRobot.actualYaw * PRECISION_DECIMALS_COMMS,
                 .posInMeters = ((statusRobot.posInMetersL + statusRobot.posInMetersR) / 2) * PRECISION_DECIMALS_COMMS,
                 .outputYawControl = statusRobot.outputYawControl * PRECISION_DECIMALS_COMMS,
                 .setPointAngle = statusRobot.localConfig.pids[PID_ANGLE].setPoint * PRECISION_DECIMALS_COMMS,
@@ -439,21 +395,10 @@ static void commsManager(void *pvParameters) {
             sendDynamicData(newData);
         }
 
-        // if (toggle) {
-        //     speedMotors.motorL = 1;
-        //     speedMotors.motorR = 1;
-        // }
-        // else {
-        //     speedMotors.motorL = 1000;
-        //     speedMotors.motorR = 1000;
-        // }
-        // speedMotors.enable = toggle;
         xQueueSend(motorControlQueueHandler,&speedMotors,0);
-        // setVelMotors(speedMotors.motorL,speedMotors.motorR); // TODO: borrar
 
         gpio_set_level(PIN_OSCILO, toggle);
         toggle = !toggle;
-
         lastStateIsConnected = isTcpClientConnected();
 
         // testHardwareVibration();
@@ -467,7 +412,7 @@ void testHardwareVibration(void) {
     int16_t testMotor=0;
 
     while(true) {
-        printf(">angle:%f\n>outputMotor:%f\n",statusRobot.pitch/10.0,statusRobot.speedL/100.0);
+        printf(">angle:%f\n>outputMotor:%f\n",statusRobot.actualPitch/10.0,statusRobot.speedL/100.0);
 
         if(flagInc){
             testMotor++;
@@ -506,18 +451,6 @@ static void ledHandler(void *pvParameters) {
         gpio_set_level(PIN_LED,0);
         vTaskDelay(pdMS_TO_TICKS(delay));
         // testHardwareVibration();
-    }
-}
-
-static void senderDebug(void *pvParameters) {
-
-    while(true) {
-        // printf(">inPos:%f\n>spPos:%f\n",statusRobot.distanceInCms,attitudeControlStat.setPointPosCms);
-        // printf(">inAngle:%f\n>spAngle:%f\n>Mot:%d\n>measMot:%d\n",statusRobot.pitch,statusRobot.setPointAngle,statusRobot.speedL,statusRobot.speedMeasL);
-
-        // printf(">Mot:%d\n>measMot:%d\n",statusRobot.speedL,statusRobot.speedMeasL);
-
-        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
 
@@ -568,9 +501,9 @@ void app_main() {
         statusRobot.localConfig.pids[PID_ANGLE].kd = 0.21;
 
         //TODO: ajustar parametros
-        statusRobot.localConfig.pids[PID_POS].kp = 0.5;//0.28;
-        statusRobot.localConfig.pids[PID_POS].ki = 0.03;//0.03;
-        statusRobot.localConfig.pids[PID_POS].kd = 1.20;//0.8;
+        statusRobot.localConfig.pids[PID_POS].kp = 2.0;
+        statusRobot.localConfig.pids[PID_POS].ki = 0.1;
+        statusRobot.localConfig.pids[PID_POS].kd = 2.73;
 
         statusRobot.localConfig.pids[PID_YAW].kp = 2.00;
         statusRobot.localConfig.pids[PID_YAW].ki = 0.3;
@@ -626,15 +559,7 @@ void app_main() {
         };
         motorsInit(configMotors);
         setMicroSteps(true);
-
-        // speedMotors.motorL = 1;
-        // speedMotors.motorR = 1000;
-        // speedMotors.enable = true;
-        // vTaskDelay(500);
-        // xQueueSend(motorControlQueueHandler,&speedMotors,0);
     #endif
-
-    
 
     // esp_log_level_set("wifi", ESP_LOG_WARN);
     // esp_log_level_set("wifi_init", ESP_LOG_WARN);
@@ -645,6 +570,4 @@ void app_main() {
     xTaskCreatePinnedToCore(attitudeControl,"attitude control",4096,NULL,4,NULL,IMU_HANDLER_CORE);
     xTaskCreatePinnedToCore(commsManager,"communication manager",4096,NULL,COMM_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);
     xTaskCreatePinnedToCore(ledHandler,"Led handler",2048,NULL,2,NULL,IMU_HANDLER_CORE);
-    
-    // xTaskCreatePinnedToCore(senderDebug,"SenderDebug handler",45200,NULL,2,NULL,IMU_HANDLER_CORE);
 }

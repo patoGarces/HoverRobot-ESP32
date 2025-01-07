@@ -3,8 +3,8 @@
 
 #include "stdint.h"
 
-// #define FREQ_MIN  500
-// #define FREQ_MAX  30000     // <--- VEL MAX
+#define LOW_LIMIT_PCNT -100 // -0x7FFF
+#define HIGH_LIMIT_PCNT 100 // 0x7FFF
 
 typedef struct {
     uint8_t gpio_mot_l_step;
