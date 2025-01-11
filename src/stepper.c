@@ -38,8 +38,6 @@
 pcnt_unit_handle_t pcntUnitL = NULL;
 pcnt_unit_handle_t pcntUnitR = NULL;
 
-char *TAG = "PULSE CNT INT";
-
 extern QueueHandle_t motorControlQueueHandler; 
 static stepper_config_t configInit;
 motors_measurements_t motorsMeasurements;
@@ -64,10 +62,6 @@ static void controlHandler(void *pvParameters) {
             }
             setEnableMotors(newVel.enable);                         // TODO: esto se va a llamar continuamente
         }
-
-        // ESP_ERROR_CHECK(pcnt_unit_get_count(pcntUnitL, &motorsMeasurements.absPosL));
-        // ESP_ERROR_CHECK(pcnt_unit_get_count(pcntUnitR, &motorsMeasurements.absPosR));
-        // ESP_LOGE("PCNT PRUEBAS","posL: %d,\tposR: %d",posL,posR);
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }

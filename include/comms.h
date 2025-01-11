@@ -22,7 +22,8 @@ enum CommandsToRobot {
     COMMAND_VIBRATION_TEST,
     COMMAND_MOVE_FORWARD,
     COMMAND_MOVE_BACKWARD,
-    COMMAND_MOVE_YAW
+    COMMAND_MOVE_ABS_YAW,
+    COMMAND_MOVE_REL_YAW
 };
 
 // ATENCION: este enum esta emparejado con una enum class en la app, se deben modificar a la vez
@@ -94,6 +95,7 @@ typedef struct {
     int16_t  setPointAngle;
     int16_t  setPointPos;
     int16_t  setPointYaw;
+    int16_t  setPointSpeed;
     uint16_t centerAngle;
     uint16_t statusCode;
 } robot_dynamic_data_t;
