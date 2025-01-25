@@ -73,13 +73,10 @@ void mpu6050Handler(void*){
 				.temp = ((mpu.getTemperature() / 340.0f) + 36.53f)
 			};
 
-			// printf("pitch: %f\n",newData.pitch);
-
 			if (contMeasure < 1000) { // 2500) {						// wait to stabilize measuments
 				contMeasure++;
 			}
 			else {
-				// printf("pitch: %f\n",newData.pitch);
             	xQueueSend(mpu6050QueueHandler,(void *) &newData, 1);
 			}
 	    }

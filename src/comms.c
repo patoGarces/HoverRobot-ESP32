@@ -100,7 +100,8 @@ void sendDynamicData(robot_dynamic_data_t dynamicData) {
 
     if (xStreamBufferSend(xStreamBufferSender, &dynamicData, sizeof(dynamicData), 1) != sizeof(dynamicData)) {
         /* TODO: Manejar el caso en el que el buffer está lleno y no se pueden enviar datos */
-        ESP_LOGI("COMMS", "BUFFER DE TRANSMISION OVERFLOW");
+        ESP_LOGI("COMMS", "Overflow stream buffer dynamic data, is full?: %d, resetting...",xStreamBufferIsFull(xStreamBufferSender));
+        xStreamBufferReset(xStreamBufferSender);
     }
 }
 

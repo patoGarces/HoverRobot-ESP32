@@ -32,7 +32,12 @@ enum {
     STATUS_ROBOT_DISABLE,
     STATUS_ROBOT_ARMED,
     STATUS_ROBOT_STABILIZED,
-    STATUS_ROBOT_ERROR
+    STATUS_ROBOT_ERROR,
+    STATUS_ROBOT_ERROR_LIMIT_SPEED,
+    STATUS_ROBOT_ERROR_MCB,
+    STATUS_ROBOT_ERROR_IMU,
+    STATUS_ROBOT_ERROR_HALLS,
+    STATUS_ROBOT_ERROR_BATTERY,
 };
 
 /**
@@ -85,6 +90,8 @@ typedef struct {
     uint16_t headerPackage;
     uint16_t batVoltage;
     uint16_t imuTemp;
+    uint16_t mcbTemp;
+    uint16_t mainboardTemp;
     int16_t  speedR;
     int16_t  speedL;
     int16_t  pitch;

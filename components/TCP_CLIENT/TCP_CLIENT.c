@@ -66,14 +66,14 @@ int sock = 0;   // TODO: sacar de aca
 static void tcpClientReceiver(void *pvParameters)
 {
     char rx_buffer[128];
+    xStreamBufferReset(xStreamBufferReceiver);
 
-    while (true) {
+    while (serverClientConnected) {
 
         int len = recv(sock, rx_buffer, sizeof(rx_buffer) - 1, 0);
    
         if (len > 0) {
             xStreamBufferSend(xStreamBufferReceiver,rx_buffer,len,1);               // TODO: rompio en pruebas, stacktrace: 0x40376c32:0x3fcbe630 0x4037d395:0x3fcbe650 0x40384ad5:0x3fcbe670 0x40380161:0x3fcbe790 0x4038020d:0x3fcbe7b0 0x40380499:0x3fcbe7e0 0x42004c96:0x3fcbe820 0x403805dd:0x3fcbe8d0
-            
         }
 
         vTaskDelay(pdMS_TO_TICKS(25));
@@ -90,26 +90,14 @@ static void tcpClientSocket(void *pvParameters) {
     char received_data[100];
 
     while (1) {
-#if defined(CONFIG_EXAMPLE_IPV4)
         struct sockaddr_in dest_addr;
         dest_addr.sin_addr.s_addr = inet_addr(host_ip);
         dest_addr.sin_family = AF_INET;
         dest_addr.sin_port = htons(PORT);
         addr_family = AF_INET;                          // ipv4
         ip_protocol = IPPROTO_TCP;//IPPROTO_IP;
-#elif defined(CONFIG_EXAMPLE_IPV6)
-        struct sockaddr_in6 dest_addr = { 0 };
-        inet6_aton(host_ip, &dest_addr.sin6_addr);
-        dest_addr.sin6_family = AF_INET6;
-        dest_addr.sin6_port = htons(PORT);
-        dest_addr.sin6_scope_id = esp_netif_get_netif_impl_index(EXAMPLE_INTERFACE);
-        addr_family = AF_INET6;
-        ip_protocol = IPPROTO_IPV6;
-#elif defined(CONFIG_EXAMPLE_SOCKET_IP_INPUT_STDIN)
-        struct sockaddr_storage dest_addr = { 0 };
-        ESP_ERROR_CHECK(get_addr_from_stdin(PORT, SOCK_STREAM, &ip_protocol, &addr_family, &dest_addr));
-#endif
         sock =  socket(addr_family, SOCK_STREAM, ip_protocol);
+        
         if (sock < 0) {
             ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
             shutdown(sock, 0);
@@ -129,8 +117,10 @@ static void tcpClientSocket(void *pvParameters) {
                 serverClientConnected = true;
                 spp_wr_task_start_up();         // TODO: refactorizar este mecanismo HORRIBLE
                 xTaskCreatePinnedToCore(tcpClientReceiver, "tcp_client receiver", 4096, NULL,configMAX_PRIORITIES - 2, NULL,0);
+
+                xStreamBufferReset(xStreamBufferSender);
                 
-                while (true) {
+                while (serverClientConnected) {
                     BaseType_t bytesStreamReceived = xStreamBufferReceive(xStreamBufferSender, received_data, sizeof(received_data), 0);
 
                     if (bytesStreamReceived > 1) {
@@ -171,6 +161,8 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
         ESP_LOGI(TAG, "station "MACSTR" leave, AID=%d",
                  MAC2STR(event->mac), event->aid);
+
+        serverClientConnected = false;
     }
 }
 

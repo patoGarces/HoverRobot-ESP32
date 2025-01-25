@@ -30,6 +30,8 @@
 #define MAX_CYCLES_LIMIT_SPEED  10
 #define MAX_VELOCITY_SPEED_CONTROL  500.00         // Velocidad maxima permitida OJO: NO PUEDE SER > 999 (para prevenir la proteccion de LIMIT_SPEED)
 
+#define MIN_PITCH_ARMED     1.00
+#define MIN_ROLL_ARMED      5.00
 
 #if defined(HARDWARE_S3)
     #define MAX_ANGLE_JOYSTICK          4.0
@@ -153,11 +155,16 @@ void setStatusRobot(uint8_t newStatus) {
         break;
 
         case STATUS_ROBOT_ERROR:
+        case STATUS_ROBOT_ERROR_BATTERY:
+        case STATUS_ROBOT_ERROR_HALLS:
+        case STATUS_ROBOT_ERROR_IMU:
+        case STATUS_ROBOT_ERROR_LIMIT_SPEED:
+        case STATUS_ROBOT_ERROR_MCB:
             speedMotors.enable = false;
             speedMotors.motorL = 0;
             speedMotors.motorR = 0;
             attitudeControlStat.contSafetyMaxSpeed = 0;
-            ESP_LOGI(TAG,"ROBOT ERROR: SAFETY MAX MOTOR");
+            ESP_LOGI(TAG,"ROBOT ERROR: %d",newStatus);
         break;
 
         default:
@@ -172,7 +179,6 @@ static void imuControlHandler(void *pvParameters) {
     vector_queue_t newAngles;
     float safetyLimitProm[5];
     uint8_t safetyLimitPromIndex = 0;
-    float angleReference = 0.00;
 
     const char *TAG = "ImuControlHandler";
 
@@ -182,10 +188,9 @@ static void imuControlHandler(void *pvParameters) {
             statusRobot.actualRoll = newAngles.roll;
             statusRobot.actualPitch = newAngles.pitch;
             statusRobot.actualYaw = newAngles.yaw;
-            statusRobot.tempImu = (uint16_t)newAngles.temp * 10;
+            statusRobot.tempImu = (uint16_t)newAngles.temp;
 
-            angleReference = newAngles.pitch;
-            int16_t outputPidMotors = (uint16_t)(pidCalculate(PID_ANGLE,angleReference) * MAX_VELOCITY); 
+            int16_t outputPidMotors = (uint16_t)(pidCalculate(PID_ANGLE,newAngles.pitch) * MAX_VELOCITY); 
 
             speedMotors.motorL = cutSpeedRange(outputPidMotors + attitudeControlMotor.motorL);
             speedMotors.motorR = cutSpeedRange(outputPidMotors + attitudeControlMotor.motorR);
@@ -195,7 +200,7 @@ static void imuControlHandler(void *pvParameters) {
                 speedMotors.motorR = backlashAttenuator(speedMotors.motorR);
             #endif
 
-            safetyLimitProm[safetyLimitPromIndex++] = angleReference;
+            safetyLimitProm[safetyLimitPromIndex++] = newAngles.pitch;
             if (safetyLimitPromIndex > 2) {
                 safetyLimitPromIndex = 0;
             }
@@ -209,13 +214,14 @@ static void imuControlHandler(void *pvParameters) {
                 }
             }
             else { 
-                if ((angleReference > (statusRobot.localConfig.centerAngle - 1)) && 
-                    (angleReference < (statusRobot.localConfig.centerAngle + 1))) { 
+                if ((newAngles.pitch > (statusRobot.localConfig.centerAngle - MIN_PITCH_ARMED)) && 
+                    (newAngles.pitch < (statusRobot.localConfig.centerAngle + MIN_PITCH_ARMED)) &&
+                    (newAngles.roll > (statusRobot.localConfig.centerAngle - MIN_ROLL_ARMED)) && 
+                    (newAngles.roll < (statusRobot.localConfig.centerAngle + MIN_ROLL_ARMED))) { 
                     
                     statusRobot.localConfig.pids[PID_ANGLE].setPoint = statusRobot.localConfig.centerAngle;         // Reseteo el setPoint de PID_ANGLE 
                     pidSetSetPoint(PID_ANGLE,statusRobot.localConfig.pids[PID_ANGLE].setPoint);
                     setStatusRobot(STATUS_ROBOT_STABILIZED);
-
                     pidSetEnable(PID_ANGLE);  
                 }
             }
@@ -224,7 +230,7 @@ static void imuControlHandler(void *pvParameters) {
                 attitudeControlStat.contSafetyMaxSpeed++;
                 if (attitudeControlStat.contSafetyMaxSpeed > MAX_CYCLES_LIMIT_SPEED ) {
                     pidSetDisable(PID_ANGLE);
-                    setStatusRobot(STATUS_ROBOT_ERROR);
+                    setStatusRobot(STATUS_ROBOT_ERROR_LIMIT_SPEED);
                 }
             }
             else {
@@ -233,8 +239,6 @@ static void imuControlHandler(void *pvParameters) {
             
             statusRobot.speedL = speedMotors.motorL;
             statusRobot.speedR = speedMotors.motorR;
-            
-            // ESP_LOGE("IMU_CONTROL_HANDLER", "Pitch: %f\tRoll: %f\tEnablePid: %d\tEnableMotor:%d\n",newAngles.pitch,newAngles.roll,pidGetEnable(),speedMotors.enable);
         }
     }
 }
@@ -358,7 +362,7 @@ static void commsManager(void *pvParameters) {
                 pidSetSetPoint(PID_ANGLE,newPidSettings.centerAngle);
                 statusRobot.localConfig.pids[newPidSettings.indexPid].setPoint = newPidSettings.centerAngle;      
 
-                statusRobot.localConfig.centerAngle = newPidSettings.centerAngle;   // TODO: validar con HARDWARE_S3      
+                statusRobot.localConfig.centerAngle = newPidSettings.centerAngle; //TODO: ELIMINAR CENTER ANGLE
             }           
             statusRobot.localConfig.pids[newPidSettings.indexPid].kp = newPidSettings.kp;
             statusRobot.localConfig.pids[newPidSettings.indexPid].ki = newPidSettings.ki;
@@ -416,7 +420,7 @@ static void commsManager(void *pvParameters) {
         #ifdef HARDWARE_S3
             if(xQueueReceive(newMcbQueueHandler,&receiveMcb,0)) {
                 statusRobot.batVoltage = receiveMcb.batVoltage;
-                statusRobot.tempImu = receiveMcb.boardTemp;
+                statusRobot.tempMcb = receiveMcb.boardTemp / 10.00;
                 statusRobot.speedMeasR = receiveMcb.speedR_meas;
                 statusRobot.speedMeasL = receiveMcb.speedL_meas;
                 statusRobot.posInMetersR = pos2mts(receiveMcb.posR);
@@ -438,7 +442,9 @@ static void commsManager(void *pvParameters) {
 
             robot_dynamic_data_t newData = {
                 .batVoltage = statusRobot.batVoltage,
-                .imuTemp = statusRobot.tempImu,
+                .imuTemp = statusRobot.tempImu * PRECISION_DECIMALS_COMMS,
+                .mcbTemp = statusRobot.tempMcb * PRECISION_DECIMALS_COMMS,     // Ya esta multiplicada por 1000 desde la mcb
+                .mainboardTemp = statusRobot.tempMainboard,
                 .speedR = statusRobot.speedR,
                 .speedL = statusRobot.speedL,
                 .pitch =  statusRobot.actualPitch * PRECISION_DECIMALS_COMMS,
@@ -556,8 +562,8 @@ void app_main() {
         statusRobot.localConfig.pids[PID_SPEED].ki = 0.41;
         statusRobot.localConfig.pids[PID_SPEED].kd = 0.04;
 
-        statusRobot.localConfig.centerAngle = 2.5;
-        statusRobot.localConfig.safetyLimits = 45;
+        statusRobot.localConfig.centerAngle = 0;
+        statusRobot.localConfig.safetyLimits = 60;//45;
     #endif
 
     #ifdef HARDWARE_PROTOTYPE
@@ -639,4 +645,25 @@ void app_main() {
     xTaskCreatePinnedToCore(attitudeControl,"attitude control",4096,NULL,4,NULL,IMU_HANDLER_CORE);
     xTaskCreatePinnedToCore(commsManager,"communication manager",4096,NULL,COMM_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);
     xTaskCreatePinnedToCore(ledHandler,"Led handler",2048,NULL,2,NULL,IMU_HANDLER_CORE);
+
+    // temperature_sensor_config_t temp_sensor_config = {
+    //     .range_min = 0,
+    //     .range_max = 100,
+    //     .clk_src = APB_CLK_FREQ
+    // };
+
+    // temperature_sensor_handle_t temp_handle = NULL;
+    // // temperature_sensor_config_t temp_sensor_config = TEMPERATURE_SENSOR_CONFIG_DEFAULT(20, 50);
+    // ESP_ERROR_CHECK(temperature_sensor_install(&temp_sensor_config, &temp_handle));
+    
+    // while (true) { 
+    // // Enable temperature sensor
+    // ESP_ERROR_CHECK(temperature_sensor_enable(temp_handle));
+    // // Get converted sensor data
+    // float tsens_out;
+    // ESP_ERROR_CHECK(temperature_sensor_get_celsius(temp_handle, &tsens_out));
+    // printf("Temperature in %f °C\n", tsens_out);
+    // // Disable the temperature sensor if it is not needed and save the power
+    // ESP_ERROR_CHECK(temperature_sensor_disable(temp_handle));
+    // }
 }

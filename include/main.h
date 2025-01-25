@@ -116,6 +116,8 @@ typedef struct {
     uint16_t                batVoltage;
     uint16_t                batPercent;
     uint16_t                tempImu;
+    uint16_t                tempMcb;
+    uint16_t                tempMainboard;
     int16_t                 speedR;
     int16_t                 speedL;
     float                   actualPitch;
