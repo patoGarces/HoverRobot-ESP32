@@ -18,26 +18,13 @@ enum CommandsToRobot {
     COMMAND_CALIBRATE_IMU,
     COMMAND_SAVE_LOCAL_CONFIG,
     COMMAND_ARMED_ROBOT,
-    COMMAND_DISARMED_ROBOT,
+    COMMAND_DEARMED_ROBOT,
+    COMMAND_CLEAN_WHEELS,
     COMMAND_VIBRATION_TEST,
     COMMAND_MOVE_FORWARD,
     COMMAND_MOVE_BACKWARD,
     COMMAND_MOVE_ABS_YAW,
     COMMAND_MOVE_REL_YAW
-};
-
-// ATENCION: este enum esta emparejado con una enum class en la app, se deben modificar a la vez
-enum {
-    STATUS_ROBOT_INIT,
-    STATUS_ROBOT_DISABLE,
-    STATUS_ROBOT_ARMED,
-    STATUS_ROBOT_STABILIZED,
-    STATUS_ROBOT_ERROR,
-    STATUS_ROBOT_ERROR_LIMIT_SPEED,
-    STATUS_ROBOT_ERROR_MCB,
-    STATUS_ROBOT_ERROR_IMU,
-    STATUS_ROBOT_ERROR_HALLS,
-    STATUS_ROBOT_ERROR_BATTERY,
 };
 
 /**
@@ -88,12 +75,15 @@ enum {
  */
 typedef struct {
     uint16_t headerPackage;
+    uint16_t isCharging;
     uint16_t batVoltage;
     uint16_t imuTemp;
     uint16_t mcbTemp;
     uint16_t mainboardTemp;
     int16_t  speedR;
     int16_t  speedL;
+    int16_t  currentR;
+    int16_t  currentL;
     int16_t  pitch;
     int16_t  roll;
     int16_t  yaw;
@@ -125,8 +115,8 @@ typedef struct {
     int16_t  distanceInMts;
 } command_move_position_t;
 
-void spp_wr_task_start_up(void);
-void spp_wr_task_shut_down(void);
+void comms_start_up(void);
+void comms_shut_down(void);
 void sendDynamicData(robot_dynamic_data_t status);
 void sendLocalConfig(robot_local_configs_t localConfig);
 #endif

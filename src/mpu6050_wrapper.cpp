@@ -66,12 +66,11 @@ void mpu6050Handler(void*){
 			mpu.dmpGetGravity(&gravity, &q);
 			mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
 
-			vector_queue_t newData = {
-				.yaw = ((ypr[0] * 180) / (float)M_PI),
-				.pitch = ((ypr[1] * 180) / (float)M_PI),
-				.roll = ((ypr[2] * 180) / (float)M_PI),
-				.temp = ((mpu.getTemperature() / 340.0f) + 36.53f)
+			vector_queue_t newData;
+			for (uint8_t i=0;i<3;i++) {
+				newData.angles[i] = ((ypr[i] * 180) / (float)M_PI);
 			};
+			newData.temp = ((mpu.getTemperature() / 340.0f) + 36.53f);
 
 			if (contMeasure < 1000) { // 2500) {						// wait to stabilize measuments
 				contMeasure++;

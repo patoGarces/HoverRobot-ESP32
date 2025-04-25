@@ -22,8 +22,8 @@ esp_err_t pidInit(pid_init_t initConfig) {
 }
 
 void pidSetEnable(uint8_t numPid) {
-    // pidControl[numPid].iTerm = 0.00;
-    // pidControl[numPid].lastInput = 0.00;
+    pidControl[numPid].iTerm = 0.00;
+    pidControl[numPid].lastInput = 0.00;
     pidControl[numPid].enablePID = true;
 }
 

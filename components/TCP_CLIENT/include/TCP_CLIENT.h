@@ -2,8 +2,11 @@
 #define TCP_CLIENT_H
 
 #include <stdio.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 
-void initTcpClient(char *serverIp);
-uint8_t isTcpClientConnected(void);
+#define TCP_CLIENT_CORE 0
+
+void initTcpClient(char *serverIp,char *ssidRed, char* passRed, QueueHandle_t connectionStateQueueHandler);
 
 #endif
