@@ -116,7 +116,6 @@ typedef struct {
 } command_move_position_t;
 
 void comms_start_up(void);
-void comms_shut_down(void);
 void sendDynamicData(robot_dynamic_data_t status);
 void sendLocalConfig(robot_local_configs_t localConfig);
 #endif

@@ -14,6 +14,7 @@
 #include "PID.h"
 #include "storage_flash.h"
 #include "mpu6050_wrapper.h"
+#include "wifi_handler.h"
 
 #ifdef HARDWARE_PROTOTYPE
     #include "stepper.h"
@@ -294,6 +295,7 @@ static void attitudeControl(void *pvParameters){
         if (statusRobot.statusCode == STATUS_ROBOT_STABILIZED) {
 
             if (!statusRobot.dirControl.joyAxisX) {     // Yaw control
+
                 if (!isYawControlEnabled) { 
                     attitudeControlStat.setPointYaw = statusRobot.actualYaw;
                     statusRobot.localConfig.pids[PID_YAW].setPoint = attitudeControlStat.setPointYaw;
@@ -699,7 +701,7 @@ void app_main() {
         .priorityTask = MPU_HANDLER_PRIORITY,
         .core = IMU_HANDLER_CORE
     };
-    mpu6050_initialize(&configMpu);
+    // mpu6050_initialize(&configMpu);
 
     pid_init_t pidConfig;
     pidConfig.sampleTimeInMs = PERIOD_IMU_MS;
@@ -732,7 +734,10 @@ void app_main() {
 
     // esp_log_level_set("wifi", ESP_LOG_WARN);
     // esp_log_level_set("wifi_init", ESP_LOG_WARN);
-    initTcpClient("", ESP_WIFI_SSID, ESP_WIFI_PASS, appConnectionStateQueueHandler);
+    initWifi(ESP_WIFI_SSID, ESP_WIFI_PASS, WIFI_MODE_STA, appConnectionStateQueueHandler);
+    // initTcpClientSocket(appConnectionStateQueueHandler);
+
+    initTcpServerSocket(appConnectionStateQueueHandler);
 
     setStatusRobot(STATUS_ROBOT_ARMED);
     xTaskCreatePinnedToCore(imuControlHandler,"Imu Control",4096,NULL,IMU_HANDLER_PRIORITY,&imuTaskHandler,IMU_HANDLER_CORE);

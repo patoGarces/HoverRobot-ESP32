@@ -43,18 +43,19 @@
 #error Error hardware robot config
 #endif
 
-#define ESP_WIFI_SSID       "HoverRobotV2"
-#define ESP_WIFI_PASS       ""
+// #define ESP_WIFI_SSID       "HoverRobotV2"
+// #define ESP_WIFI_PASS       ""
 
 // AP CASA
 // #define ESP_WIFI_SSID        "Speedy-Fibra-8F8D64"
 // #define ESP_WIFI_PASS        "39919131"
-// #define HOST_IP_ADDR         "192.168.1.35"
 
 // AP TENDA
-// #define ESP_WIFI_SSID        "HoverRobot"
-// #define ESP_WIFI_PASS        "12345678"
-// #define HOST_IP_ADDR         "192.168.0.100"
+#define ESP_WIFI_SSID        "HoverRobotHub"
+#define ESP_WIFI_PASS        "12345678"
+
+// STA PROPIO
+// #define HOST_IP_ADDR                "192.168.4.2"
 
 #if defined(HARDWARE_PROTOTYPE)
 

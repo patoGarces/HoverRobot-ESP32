@@ -17,14 +17,12 @@ extern QueueHandle_t newCommandQueueHandler;
 
 TaskHandle_t commsHandle;
 
+static const char *TAG = "COMMS HANDLER";
+
 static void communicationHandler(void * param);
 
 void comms_start_up(void){
     xTaskCreatePinnedToCore(communicationHandler, "communicationHandler", 4096, NULL, 10, &commsHandle,COMMS_HANDLER_CORE);
-}
-
-void comms_shut_down(void) {
-    vTaskDelete(commsHandle);
 }
 
 uint32_t getUint32( uint32_t index, char* payload){
@@ -35,7 +33,7 @@ uint32_t getUint16( uint16_t index, char* payload){
     return (((uint32_t)payload[index+1]) << 8) + payload[index];
 }
 
-void communicationHandler(void * param) {
+static void communicationHandler(void * param) {
     char received_data[100];
     uint16_t contTimeout = 0;
     pid_settings_app_raw_t      newPidSettingsRaw;
@@ -67,7 +65,6 @@ void communicationHandler(void * param) {
                     // if (bytes_received == sizeof(newControlVal)) {  
                     memcpy(&newControlVal,received_data,sizeof(newControlVal));//bytes_received);
                     contTimeout = 0;
-                    // printf("NewControl recibido!\n");
                     xQueueSend(receiveControlQueueHandler,(void*)&newControlVal,0);
 
                 break;
@@ -79,7 +76,7 @@ void communicationHandler(void * param) {
                     }
                 break;
                 default:
-                    printf("\n\nComando no reconocido: %x\n\n",headerPackage); 
+                    ESP_LOGE(TAG, "\n\nComando no reconocido: %x\n\n",headerPackage); 
                 break;
             }
         }
