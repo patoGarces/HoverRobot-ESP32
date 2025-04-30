@@ -28,7 +28,6 @@ uint8_t serverClientConnected = false;
 
 static void newConnectionState(QueueHandle_t connectionQueueHandler, bool state) {
     serverClientConnected = state;
-    ESP_LOGE(TAG, "new connection state: %d", state);
     if (xQueueOverwrite(connectionQueueHandler, &state) != pdPASS) {
         ESP_LOGE(TAG, "Error al enviar el nuevo estado de connection");
     }
@@ -100,28 +99,9 @@ static void tcpClientSocket(void *pvParameters) {
                 comms_start_up();
                 xTaskCreatePinnedToCore(tcpSocketReceiverTask, "tcp_client receiver", 4096, &sock, configMAX_PRIORITIES - 2, NULL, COMMS_HANDLER_CORE);
 
-                // if (connectionStateQueueHandler) {
-                //     newConnectionState(connectionStateQueueHandler,true);
-                // }
-                // xStreamBufferReset(xStreamBufferSender);
-                
-                // while (serverClientConnected) {
-                //     BaseType_t bytesStreamReceived = xStreamBufferReceive(xStreamBufferSender, received_data, sizeof(received_data), 0);
-
-                //     if (bytesStreamReceived > 1) {
-                //         int errSend = lwip_send(sock, received_data, bytesStreamReceived, 0);
-                //         if (errSend < 0) {
-                //             ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
-                //             break;
-                //         } 
-                //     }
-                //     vTaskDelay(pdMS_TO_TICKS(25));
-                // }
                 tcpSocketSender(sock, connectionStateQueueHandler);
-
-                // if (connectionStateQueueHandler) {
-                    newConnectionState(connectionStateQueueHandler,false);
-                // }
+                newConnectionState(connectionStateQueueHandler,false);
+                
                 if (sock != -1) {
                     ESP_LOGE(TAG, "Shutting down socket and restarting...");
                     shutdown(sock, 0);
@@ -143,7 +123,7 @@ void initTcpClientSocket(QueueHandle_t connectionStateQueueHandler) {
 static void tcpServerSocketTask(void *pvParameters) {
 
     QueueHandle_t connectionStateQueueHandler = (QueueHandle_t)pvParameters;
-    char addr_str[128];
+    char ipClientString[128];
     int addr_family = AF_INET;
     int ip_protocol = 0;
 
@@ -155,7 +135,6 @@ static void tcpServerSocketTask(void *pvParameters) {
 
     struct sockaddr_storage dest_addr;
 
-// #ifdef CONFIG_EXAMPLE_IPV4
     if (addr_family == AF_INET) {
         struct sockaddr_in *dest_addr_ip4 = (struct sockaddr_in *)&dest_addr;
         dest_addr_ip4->sin_addr.s_addr = htonl(INADDR_ANY);
@@ -163,16 +142,6 @@ static void tcpServerSocketTask(void *pvParameters) {
         dest_addr_ip4->sin_port = htons(PORT);
         ip_protocol = IPPROTO_IP;
     }
-// #endif
-// #ifdef CONFIG_EXAMPLE_IPV6
-//     if (addr_family == AF_INET6) {
-//         struct sockaddr_in6 *dest_addr_ip6 = (struct sockaddr_in6 *)&dest_addr;
-//         bzero(&dest_addr_ip6->sin6_addr.un, sizeof(dest_addr_ip6->sin6_addr.un));
-//         dest_addr_ip6->sin6_family = AF_INET6;
-//         dest_addr_ip6->sin6_port = htons(PORT);
-//         ip_protocol = IPPROTO_IPV6;
-//     }
-// #endif
 
     int listen_sock = socket(addr_family, SOCK_STREAM, ip_protocol);
     if (listen_sock < 0) {
@@ -182,11 +151,6 @@ static void tcpServerSocketTask(void *pvParameters) {
     }
     int opt = 1;
     setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-#if defined(CONFIG_EXAMPLE_IPV4) && defined(CONFIG_EXAMPLE_IPV6)
-    // Note that by default IPV6 binds to both protocols, it is must be disabled
-    // if both protocols used at the same time (used in CI)
-    setsockopt(listen_sock, IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof(opt));
-#endif
 
     ESP_LOGI(TAG, "Socket created");
 
@@ -223,18 +187,17 @@ static void tcpServerSocketTask(void *pvParameters) {
         setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE, &keepIdle, sizeof(int));
         setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &keepInterval, sizeof(int));
         setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, &keepCount, sizeof(int));
-        // Convert ip address to string
-// #ifdef CONFIG_EXAMPLE_IPV4
-        if (source_addr.ss_family == PF_INET) {
-            inet_ntoa_r(((struct sockaddr_in *)&source_addr)->sin_addr, addr_str, sizeof(addr_str) - 1);
+
+        inet_ntoa_r(((struct sockaddr_in *)&source_addr)->sin_addr, ipClientString, sizeof(ipClientString) - 1);
+
+        // Identifico el client basandome en su IP fija
+        if (!strcmp(CLIENT_IP_APP,ipClientString)) {
+            ESP_LOGI(TAG, "Socket client identificado como APP: %s", ipClientString);
+        } else if (!strcmp(CLIENT_IP_PC,ipClientString)) {
+            ESP_LOGI(TAG, "Socket client identificado como PC: %s", ipClientString);
+        } else {
+            ESP_LOGI(TAG, "Socket client desconocido: %s", ipClientString);
         }
-// #endif
-// #ifdef CONFIG_EXAMPLE_IPV6
-//         if (source_addr.ss_family == PF_INET6) {
-//             inet6_ntoa_r(((struct sockaddr_in6 *)&source_addr)->sin6_addr, addr_str, sizeof(addr_str) - 1);
-//         }
-// #endif
-        ESP_LOGI(TAG, "Socket accepted ip address: %s", addr_str);
 
         comms_start_up();
         xTaskCreatePinnedToCore(tcpSocketReceiverTask, "tcp_client receiver", 4096, &sock, configMAX_PRIORITIES - 2, NULL, COMMS_HANDLER_CORE);

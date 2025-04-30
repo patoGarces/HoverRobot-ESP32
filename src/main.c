@@ -701,7 +701,7 @@ void app_main() {
         .priorityTask = MPU_HANDLER_PRIORITY,
         .core = IMU_HANDLER_CORE
     };
-    // mpu6050_initialize(&configMpu);
+    mpu6050_initialize(&configMpu);
 
     pid_init_t pidConfig;
     pidConfig.sampleTimeInMs = PERIOD_IMU_MS;
