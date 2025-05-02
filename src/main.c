@@ -228,6 +228,14 @@ static void imuControlHandler(void *pvParameters) {
             statusRobot.actualYaw = newAngles.angles[ANGLE_YAW];
             statusRobot.tempImu = (uint16_t)newAngles.temp;
 
+            
+            int16_t meanSpeedMeas = (statusRobot.speedMeasR - statusRobot.speedMeasL) / 20.00;       // velocidad maxima deberia ser 1000
+            float desiredAngleControl = (float)(pidCalculate(PID_SPEED, meanSpeedMeas) * MAX_ANGLE_CONTROL); 
+
+            // statusRobot.localConfig.pids[PID_ANGLE].setPoint = desiredAngleControl + statusRobot.localConfig.centerAngle; // TODO: probar NO contemplar el center angle en position control
+            statusRobot.localConfig.pids[PID_ANGLE].setPoint = desiredAngleControl;
+            pidSetSetPoint(PID_ANGLE, desiredAngleControl);
+
             int16_t outputPidMotors = (uint16_t)(pidCalculate(PID_ANGLE,statusRobot.actualPitch) * MAX_VELOCITY); 
 
             speedMotors.motorL = cutSpeedRange(outputPidMotors + attitudeControlMotor.motorL) * DIRECTION_L_MOTOR;
@@ -263,7 +271,12 @@ static void imuControlHandler(void *pvParameters) {
                         statusRobot.localConfig.pids[PID_ANGLE].setPoint = statusRobot.localConfig.centerAngle;         // Reseteo el setPoint de PID_ANGLE 
                         pidSetSetPoint(PID_ANGLE,statusRobot.localConfig.pids[PID_ANGLE].setPoint);
                         setStatusRobot(STATUS_ROBOT_STABILIZED);
+
+                        statusRobot.localConfig.pids[PID_SPEED].setPoint = 0.00; // Inicio con el setpoint de velocidad en 0
+                        pidSetSetPoint(PID_SPEED,statusRobot.localConfig.pids[PID_SPEED].setPoint);
+
                         pidSetEnable(PID_ANGLE);  
+                        pidSetEnable(PID_SPEED);
                     #endif
                 }
             }
@@ -287,8 +300,10 @@ static void imuControlHandler(void *pvParameters) {
 }
 
 static void attitudeControl(void *pvParameters){
-    float desiredAngleControl = 0.00;
+    float desiredSpeedControl = 0.00;
     uint8_t isYawControlEnabled = false;
+
+    const char *TAG = "AttitudeControlTask";
 
     while(true) {
 
@@ -302,7 +317,7 @@ static void attitudeControl(void *pvParameters){
                     pidSetSetPoint(PID_YAW, attitudeControlStat.setPointYaw / 1.8);
                     pidSetEnable(PID_YAW);
                     isYawControlEnabled = true;
-                    ESP_LOGI("AttitudeControl","Enable YAW_CONTROL, sp: %f",attitudeControlStat.setPointYaw);
+                    ESP_LOGI(TAG,"Enable YAW_CONTROL, sp: %f",attitudeControlStat.setPointYaw);
                 }
 
                 float angularDist = angularDistance(attitudeControlStat.setPointYaw,statusRobot.actualYaw);
@@ -317,47 +332,33 @@ static void attitudeControl(void *pvParameters){
                 attitudeControlMotor.motorR = (statusRobot.dirControl.joyAxisX / 100.00) * MAX_ROTATION_RATE_CONTROL;
                 attitudeControlMotor.motorL = attitudeControlMotor.motorR * -1;
             }
-            
+
             if (!statusRobot.dirControl.joyAxisY) {     // Pos control
                 statusRobot.actualDistInCms = ((statusRobot.posInMetersL + statusRobot.posInMetersR) / 2) * 100.00;
 
                 if (attitudeControlStat.attMode != ATT_MODE_POS_CONTROL) {
-                    pidSetDisable(PID_SPEED);
-                    statusRobot.localConfig.pids[PID_SPEED].setPoint = 0.00;
-
-                    attitudeControlStat.setPointPosCms = statusRobot.actualDistInCms;
-                    statusRobot.localConfig.pids[PID_POS].setPoint = attitudeControlStat.setPointPosCms;
-                    pidSetSetPoint(PID_POS,attitudeControlStat.setPointPosCms);
+                    attitudeControlStat.setPointPosCms = statusRobot.actualDistInCms;           // TODO: podria setearlo cuando llegue a 0 la velocidad de los motores
+                    statusRobot.localConfig.pids[PID_POS].setPoint = statusRobot.actualDistInCms;
+                    pidSetSetPoint(PID_POS, statusRobot.actualDistInCms);
                     pidSetEnable(PID_POS);
-                    // desiredAngleControl = 0;
                     attitudeControlStat.attMode = ATT_MODE_POS_CONTROL;
-                    ESP_LOGI("AttitudeControl","Enable POS_CONTROL");
+                    ESP_LOGI(TAG,"Enable POS_CONTROL");
                 }
-                else {
-                    desiredAngleControl = pidCalculate(PID_POS,statusRobot.actualDistInCms) * MAX_ANGLE_CONTROL; 
-                }
+         
+                desiredSpeedControl = pidCalculate(PID_POS, statusRobot.actualDistInCms) * (MAX_VELOCITY_SPEED_CONTROL/10.00); 
             }
             else {
-                if (attitudeControlStat.attMode != ATT_MODE_SPEED_CONTROL) {
+                desiredSpeedControl = (statusRobot.dirControl.joyAxisY * MAX_VELOCITY_SPEED_CONTROL) / 1000.00;
+                if (attitudeControlStat.attMode != ATT_MODE_MANUAL_CONTROL) {
                     pidSetDisable(PID_POS);
                     statusRobot.localConfig.pids[PID_POS].setPoint = 0.00;
-                    
-                    attitudeControlStat.setPointSpeed = 0;
-                    statusRobot.localConfig.pids[PID_SPEED].setPoint = attitudeControlStat.setPointSpeed;
-                    pidSetSetPoint(PID_SPEED,attitudeControlStat.setPointSpeed);
-                    pidSetEnable(PID_SPEED);
-                    // desiredAngleControl = 0;
-                    attitudeControlStat.attMode = ATT_MODE_SPEED_CONTROL;
-                    ESP_LOGI("AttitudeControl","Enable SPEED_CONTROL");
-                }
-                else {
-
-                    attitudeControlStat.setPointSpeed = (statusRobot.dirControl.joyAxisY * -MAX_VELOCITY_SPEED_CONTROL)  / 1000.00;
-                    statusRobot.localConfig.pids[PID_SPEED].setPoint = attitudeControlStat.setPointSpeed;
-                    pidSetSetPoint(PID_SPEED,attitudeControlStat.setPointSpeed);
-                    desiredAngleControl = pidCalculate(PID_SPEED,statusRobot.speedL / 10.00) * MAX_ANGLE_CONTROL * -1;  // TODO: rermplazar speedL por velocidad medidad
+                    attitudeControlStat.attMode = ATT_MODE_MANUAL_CONTROL;
+                    ESP_LOGI(TAG,"Enable MANUAL_CONTROL");
                 }
             }
+
+            statusRobot.localConfig.pids[PID_SPEED].setPoint = desiredSpeedControl;
+            pidSetSetPoint(PID_SPEED, desiredSpeedControl);
         }
         else {
             if (isYawControlEnabled) {
@@ -365,13 +366,6 @@ static void attitudeControl(void *pvParameters){
             }
         }
 
-        statusRobot.localConfig.pids[PID_ANGLE].setPoint = desiredAngleControl + statusRobot.localConfig.centerAngle; // TODO: probar NO contemplar el center angle en position control
-        pidSetSetPoint(PID_ANGLE,statusRobot.localConfig.pids[PID_ANGLE].setPoint);     // La salida del control de posicion alimenta al PID de angulo
-
-        // PID POS
-        // printf(">inPos:%f\n>spPos:%f\n>spPos2:%f\n>outPos:%f\n",statusRobot.distanceInCms,attitudeControlStat.setPointPosCms,pidGetSetPoint(PID_POS)*100,outputPosControl);
-        // PID ANGLE
-        // printf(">inAngle:%f\n>spAngle:%f\n>outAngle:%d\n",statusRobot.pitch,statusRobot.localConfig.pids[PID_ANGLE].setPoint,statusRobot.speedL);
         vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
@@ -409,7 +403,7 @@ static void commsManager(void *pvParameters) {
             statusRobot.localConfig.pids[newPidSettings.indexPid].ki = newPidSettings.ki;
             statusRobot.localConfig.pids[newPidSettings.indexPid].kd = newPidSettings.kd;
                     
-            printf("\nNuevos parametros %d:\n\tP: %f\n\tI: %f\n\tD: %f,\n\tcenter: %f\n\tsafety limits: %f\n\n",newPidSettings.indexPid,newPidSettings.kp,newPidSettings.ki,newPidSettings.kd,newPidSettings.centerAngle,newPidSettings.safetyLimits);              
+            printf("\n**\tNuevos parametros %d:\t**\n*\tP: %f\t*\n*\tI: %f\t*\n*\tD: %f\t*\n*\tcenter: %f\t*\n*\tsafety limits: %f\t*\n",newPidSettings.indexPid,newPidSettings.kp,newPidSettings.ki,newPidSettings.kd,newPidSettings.centerAngle,newPidSettings.safetyLimits);              
         }
 
         if (xQueueReceive(newCommandQueueHandler,&newCommand,0)) {
@@ -516,21 +510,21 @@ static void commsManager(void *pvParameters) {
                 .isCharging = statusRobot.isCharging,
                 .batVoltage = statusRobot.batVoltage,
                 .imuTemp = statusRobot.tempImu * PRECISION_DECIMALS_COMMS,
-                .mcbTemp = statusRobot.tempMcb * PRECISION_DECIMALS_COMMS,     // Ya esta multiplicada por 1000 desde la mcb
+                .mcbTemp = statusRobot.tempMcb * PRECISION_DECIMALS_COMMS,      // Ya esta multiplicada por 1000 desde la mcb
                 .mainboardTemp = statusRobot.tempMainboard,
-                .speedR = statusRobot.speedR,
-                .speedL = statusRobot.speedL,
-                .currentR = statusRobot.currentR,       // Ya esta multiplicada por 100 desde la MCB
-                .currentL = statusRobot.currentL,       // Ya esta multiplicada por 100 desde la MCB
+                .speedR = statusRobot.speedMeasR,
+                .speedL = statusRobot.speedMeasL,
+                .currentR = statusRobot.currentR,                               // Ya esta multiplicada por 100 desde la MCB
+                .currentL = statusRobot.currentL,                               // Ya esta multiplicada por 100 desde la MCB
                 .pitch =  statusRobot.actualPitch * PRECISION_DECIMALS_COMMS,
                 .roll = statusRobot.actualRoll * PRECISION_DECIMALS_COMMS,
                 .yaw = statusRobot.actualYaw * PRECISION_DECIMALS_COMMS,
                 .posInMeters = ((statusRobot.posInMetersL + statusRobot.posInMetersR) / 2) * PRECISION_DECIMALS_COMMS,
                 .outputYawControl = statusRobot.outputYawControl * PRECISION_DECIMALS_COMMS,
                 .setPointAngle = statusRobot.localConfig.pids[PID_ANGLE].setPoint * PRECISION_DECIMALS_COMMS,
-                .setPointPos = statusRobot.localConfig.pids[PID_POS].setPoint,                                  // No lo multiplico, para mandarlo en mts
+                .setPointPos = statusRobot.localConfig.pids[PID_POS].setPoint,                                          // No lo multiplico, para mandarlo en mts
                 .setPointYaw = statusRobot.localConfig.pids[PID_YAW].setPoint * PRECISION_DECIMALS_COMMS,
-                .setPointSpeed = statusRobot.localConfig.pids[PID_SPEED].setPoint * PRECISION_DECIMALS_COMMS,
+                .setPointSpeed = statusRobot.localConfig.pids[PID_SPEED].setPoint * PRECISION_DECIMALS_COMMS * 10,      // El setpoint en el PID es RPM/10
                 .centerAngle = statusRobot.localConfig.centerAngle * PRECISION_DECIMALS_COMMS,
                 .statusCode = statusRobot.statusCode
             };
@@ -548,6 +542,7 @@ static void commsManager(void *pvParameters) {
             statusRobot.isMcbConnected = false;
             setStatusRobot(STATUS_ROBOT_ERROR_MCB_CONNECTION);
         }
+
         vTaskDelay(pdMS_TO_TICKS(25));
     }
 }
@@ -646,17 +641,18 @@ void app_main() {
         statusRobot.localConfig.pids[PID_ANGLE].ki = 0.13;
         statusRobot.localConfig.pids[PID_ANGLE].kd = 1.16;
 
-        statusRobot.localConfig.pids[PID_POS].kp = 0.84;
-        statusRobot.localConfig.pids[PID_POS].ki = 0.11;;
-        statusRobot.localConfig.pids[PID_POS].kd = 1.27;;
+        statusRobot.localConfig.pids[PID_SPEED].kp = 5.20;
+        statusRobot.localConfig.pids[PID_SPEED].ki = 0.14;
+        statusRobot.localConfig.pids[PID_SPEED].kd = 0.50;
+
+        statusRobot.localConfig.pids[PID_POS].kp = 0.36;
+        statusRobot.localConfig.pids[PID_POS].ki = 0.02;
+        statusRobot.localConfig.pids[PID_POS].kd = 0.05;
 
         statusRobot.localConfig.pids[PID_YAW].kp = 2.00;
         statusRobot.localConfig.pids[PID_YAW].ki = 0.3;
         statusRobot.localConfig.pids[PID_YAW].kd = 0.00;
         
-        statusRobot.localConfig.pids[PID_SPEED].kp = 2.80;
-        statusRobot.localConfig.pids[PID_SPEED].ki = 0.41;
-        statusRobot.localConfig.pids[PID_SPEED].kd = 0.04;
 
         statusRobot.localConfig.centerAngle = 0;
         statusRobot.localConfig.safetyLimits = 60;//45;

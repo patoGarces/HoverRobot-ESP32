@@ -32,7 +32,7 @@
 
 #define MAX_VELOCITY                1000.00
 #define MAX_CYCLES_LIMIT_SPEED      10
-#define MAX_VELOCITY_SPEED_CONTROL  500.00         // Velocidad maxima permitida OJO: NO PUEDE SER > 999 (para prevenir la proteccion de LIMIT_SPEED)
+#define MAX_VELOCITY_SPEED_CONTROL  300.00//500.00         // Velocidad maxima permitida OJO: NO PUEDE SER > 999 (para prevenir la proteccion de LIMIT_SPEED)
 
 #define MIN_PITCH_ARMED             1.00
 #define MIN_ROLL_ARMED              5.00
@@ -60,9 +60,11 @@
 
 #if defined(HARDWARE_PROTOTYPE)
 
-    #define MAX_ANGLE_JOYSTICK          8.0
     #define MAX_ANGLE_CONTROL           15.0
     #define MAX_ROTATION_RATE_CONTROL   100
+
+    #define STEPS_PER_REV       6400.00                 // 200 steps * 1/32 microsteps = 6400 pulsos por vuelta
+    #define DIST_PER_REV        0.326725635973          // diam 0.104m * pi = 0,326725635973 mts
 
     #define PIN_LED             2
     #define PIN_OSCILO          27//26
@@ -79,9 +81,6 @@
     #define GPIO_MOT_ENABLE     14
     #define GPIO_MOT_MICRO_STEP 12
 
-    #define STEPS_PER_REV       6400.00                 // 200 steps * 1/32 microsteps = 6400 pulsos por vuelta
-    #define DIST_PER_REV        0.326725635973          // diam 0.104m * pi = 0,326725635973 mts
-
     enum {
         ANGLE_YAW,
         ANGLE_PITCH,
@@ -92,9 +91,11 @@
     // #define PIN_LED         27
     // #define PIN_OSCILO      3
 
-    #define MAX_ANGLE_JOYSTICK          4.0
     #define MAX_ANGLE_CONTROL           15.0
     #define MAX_ROTATION_RATE_CONTROL   40.0
+
+    #define STEPS_PER_REV       90.00                   // 90 steps por vuelta
+    #define DIST_PER_REV        0.5310707511            // diam 17cm * pi = 53.10707 cms = 0.5310707511 mts
 
     #define INVERT_HALL_SIDE        // Invierte el sensor R con el L(depende de la ubicacion fisica de la MCB)
 
@@ -139,9 +140,6 @@
     #define GPIO_LED_RGB_STATUS 13
     #define CANT_LED_STATUS     8
 
-    #define STEPS_PER_REV       90.00                   // 90 steps por vuelta
-    #define DIST_PER_REV        0.5310707511            // diam 17cm * pi = 53.10707 cms = 0.5310707511 mts
-
     #define ENABLE_POS_CONTROL      1
 
     enum {
@@ -162,7 +160,7 @@ enum {              // OJO: en sync con App
 enum {
     ATT_MODE_ATTI,
     ATT_MODE_POS_CONTROL,
-    ATT_MODE_SPEED_CONTROL,
+    ATT_MODE_MANUAL_CONTROL,
 };
 
 // ATENCION: este enum esta emparejado con una enum class en la app, se deben modificar a la vez
