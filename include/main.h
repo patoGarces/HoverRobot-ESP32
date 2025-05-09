@@ -97,6 +97,8 @@
     #define STEPS_PER_REV       90.00                   // 90 steps por vuelta
     #define DIST_PER_REV        0.5310707511            // diam 17cm * pi = 53.10707 cms = 0.5310707511 mts
 
+    #define CONVERT_RPM_TO_MPS(rpm) (rpm * DIST_PER_REV) / 60.00    
+
     #define INVERT_HALL_SIDE        // Invierte el sensor R con el L(depende de la ubicacion fisica de la MCB)
 
     #define MAX_CONT_TIMEOUT_MCB    15 // cada tick son 25ms

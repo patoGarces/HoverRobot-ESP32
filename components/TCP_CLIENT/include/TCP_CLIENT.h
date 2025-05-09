@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
-#include "esp_wifi.h"
 
 #define TCP_CLIENT_CORE 0
 
