@@ -10,9 +10,8 @@
 #define HARDWARE_MAINBOARD 
 // #define HARDWARE_SPLITBOARD
 
-#if defined(HARDWARE_MAINBOARD) || defined(HARDWARE_SPLITBOARD)
-    #define HARDWARE_HOVERROBOT
-#endif
+// #define NETWORK_WIFI_MODE_AP
+#define NETWORK_WIFI_MODE_STA
 
 #define PERIOD_IMU_MS           100
 #define MPU_HANDLER_PRIORITY    5//configMAX_PRIORITIES - 1
@@ -37,26 +36,32 @@
 #define MIN_PITCH_ARMED             1.00
 #define MIN_ROLL_ARMED              5.00
 
+#define HOST_SERVER_IP_ESP  "192.168.0.101"
+#define CLIENT_IP_APP       "192.168.0.100"
+#define CLIENT_IP_RASPI     "192.168.0.102"
+#define CLIENT_IP_PC        "192.168.0.103"
+
+#if defined(HARDWARE_MAINBOARD) || defined(HARDWARE_SPLITBOARD)
+    #define HARDWARE_HOVERROBOT
+#endif
+
 #if defined(HARDWARE_PROTOTYPE) && defined(HARDWARE_HOVERROBOT)
 #error Error hardware robot config
 #elif !defined(HARDWARE_PROTOTYPE) && !defined(HARDWARE_HOVERROBOT)
 #error Error hardware robot config
 #endif
 
-#define CLIENT_IP_ESP       "192.168.0.101"
-#define CLIENT_IP_APP       "192.168.0.100"
-#define CLIENT_IP_RASPI     "192.168.0.102"
-#define CLIENT_IP_PC        "192.168.0.103"
-
-// #define ESP_WIFI_SSID           "HoverRobotV2"
-// #define ESP_WIFI_PASS           ""
-
-// AP TENDA
-#define ESP_WIFI_SSID           "HoverRobotHub"
-#define ESP_WIFI_PASS           "12345678"
-
-// STA PROPIO
-// #define HOST_IP_ADDR                "192.168.4.2"
+#if defined(NETWORK_WIFI_MODE_AP) && defined(NETWORK_WIFI_MODE_STA)
+    #error Error network robot config
+#elif defined(NETWORK_WIFI_MODE_AP)
+    #define ESP_WIFI_SSID           "HoverRobotAP"
+    #define ESP_WIFI_PASS           "12345678"
+#else
+    #define WIFI_MODE   WIFI_MODE_AP
+    // AP TENDA
+    #define ESP_WIFI_SSID           "HoverRobotHub"
+    #define ESP_WIFI_PASS           "12345678"
+#endif
 
 #if defined(HARDWARE_PROTOTYPE)
 

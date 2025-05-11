@@ -7,8 +7,8 @@
 #include "storage_flash.h"
 #include <string.h>
 
-extern StreamBufferHandle_t xStreamBufferReceiver;
-extern StreamBufferHandle_t xStreamBufferSender;
+StreamBufferHandle_t xStreamBufferReceiver;
+StreamBufferHandle_t xStreamBufferSender;
 
 // queues de recepcion externa
 extern QueueHandle_t newPidParamsQueueHandler;

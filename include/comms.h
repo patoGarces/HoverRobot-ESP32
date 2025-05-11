@@ -10,7 +10,7 @@
 #define HEADER_PACKAGE_STATUS           0xAB01          // key a enviar que indica que el paquete enviado a la app es un status
 #define HEADER_PACKAGE_CONTROL          0xAB02          // key que indica que el paquete recibido de la app es de control
 #define HEADER_PACKAGE_SETTINGS         0xAB03          // key que indica que el paquete recibido de la app es de configuracion
-#define HEADER_PACKAGE_COMMAND          0xAB04          // key que indica que el paquete a enviar es un comando
+#define HEADER_PACKAGE_COMMAND          0xAB04          // key que indica que el paquete recibido de la app es un comando
 
 #define HEADER_PACKAGE_LOCAL_CONFIG     0xAB05          // key que indica que el paquete a enviar es una setting local
 

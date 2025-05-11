@@ -21,7 +21,7 @@
 #endif
 
 /* Incluyo componentes */
-#include "TCP_CLIENT.h"
+#include "tcp_socket_server.h"
 
 #if defined(HARDWARE_HOVERROBOT)
     #include "CAN_MCB.h"
@@ -33,7 +33,8 @@ QueueHandle_t newPidParamsQueueHandler;                     // Recibo nuevos par
 QueueHandle_t newCommandQueueHandler;
 QueueHandle_t receiveControlQueueHandler;
 QueueHandle_t newMcbQueueHandler;
-QueueHandle_t appConnectionStateQueueHandler;
+QueueHandle_t socketConnectionStateQueueHandler;
+QueueHandle_t networkStateQueueHandler;
 
 TaskHandle_t imuTaskHandler;
 
@@ -368,11 +369,11 @@ static void attitudeControl(void *pvParameters){
 }
 
 static void commsManager(void *pvParameters) {
-    uint8_t contMcbTimeout = 0;
+    uint8_t contMcbTimeout = 0, socketClientsConnected = 0, lastSocketClientsConnected = 0;
+    bool networkState = false, lastNetworkState = false;
     pid_settings_comms_t    newPidSettings;
     command_app_raw_t       newCommand;
     control_app_raw_t       newControl;
-    bool connectionState = false,lastStateIsConnected = false;
 
     #ifdef HARDWARE_HOVERROBOT
         rx_motor_control_board_t receiveMcb;
@@ -382,7 +383,6 @@ static void commsManager(void *pvParameters) {
     const char *TAG = "commsManager";
 
     while(true) {
-
         if (xQueueReceive(receiveControlQueueHandler,&newControl,0)) {
             statusRobot.dirControl.joyAxisX = newControl.axisX;
             statusRobot.dirControl.joyAxisY = newControl.axisY;
@@ -399,8 +399,8 @@ static void commsManager(void *pvParameters) {
             statusRobot.localConfig.pids[newPidSettings.indexPid].kp = newPidSettings.kp;
             statusRobot.localConfig.pids[newPidSettings.indexPid].ki = newPidSettings.ki;
             statusRobot.localConfig.pids[newPidSettings.indexPid].kd = newPidSettings.kd;
-                    
-            printf("\n**\tNuevos parametros %d:\t**\n*\tP: %f\t*\n*\tI: %f\t*\n*\tD: %f\t*\n*\tcenter: %f\t*\n*\tsafety limits: %f\t*\n",newPidSettings.indexPid,newPidSettings.kp,newPidSettings.ki,newPidSettings.kd,newPidSettings.centerAngle,newPidSettings.safetyLimits);              
+                 
+            ESP_LOGI(TAG, "\n**\tNuevos parametros %d:\t**\n*\tP: %.2f\t\t\t*\n*\tI: %.2f\t\t\t*\n*\tD: %.2f\t\t\t*\n*\tcenter: %.2f\t\t*\n*\tsafety limits: %.2f\t*\n",newPidSettings.indexPid,newPidSettings.kp,newPidSettings.ki,newPidSettings.kd,newPidSettings.centerAngle,newPidSettings.safetyLimits);              
         }
 
         if (xQueueReceive(newCommandQueueHandler,&newCommand,0)) {
@@ -496,12 +496,20 @@ static void commsManager(void *pvParameters) {
             statusRobot.posInMetersL = pos2mts(newMeasureMotors.absPosL);
         #endif
 
-        xQueuePeek(appConnectionStateQueueHandler,&connectionState,0);       // Leo el ultimo valor emitido, sin sacarlo de la queue
-        if (connectionState) {
-            if (!lastStateIsConnected) {
+        xQueuePeek(networkStateQueueHandler, &networkState, 0);
+        if (networkState != lastNetworkState) {
+            ESP_LOGI(TAG, "Nuevo estado de conexion wifi: %d", networkState);
+            lastNetworkState = networkState;
+        }
+
+        xQueuePeek(socketConnectionStateQueueHandler, &socketClientsConnected,0);       // Leo el ultimo valor emitido, sin sacarlo de la queue
+        if (networkState && socketClientsConnected > 0) {
+            if (socketClientsConnected > lastSocketClientsConnected) {
                 sendLocalConfig(statusRobot.localConfig);
                 ESP_LOGE(TAG,"Envio nuevo local config");
+                
             }
+            lastSocketClientsConnected = socketClientsConnected;
 
             robot_dynamic_data_t newData = {
                 .isCharging = statusRobot.isCharging,
@@ -527,7 +535,6 @@ static void commsManager(void *pvParameters) {
             };
             sendDynamicData(newData);
         }
-        lastStateIsConnected = connectionState;
 
         xQueueSend(motorControlQueueHandler,&speedMotors,0);
 
@@ -621,16 +628,17 @@ void app_main() {
     // gpio_set_level(PIN_OSCILO, 1);
 
     receiveControlQueueHandler = xQueueCreate(1, sizeof(control_app_raw_t));
-    newPidParamsQueueHandler = xQueueCreate(1,sizeof(pid_settings_comms_t));
-    newCommandQueueHandler = xQueueCreate(1, sizeof(command_app_raw_t));
-    motorControlQueueHandler = xQueueCreate(1,sizeof(output_motors_t));
-    mpu6050QueueHandler = xQueueCreate(1,sizeof(vector_queue_t));
-    appConnectionStateQueueHandler = xQueueCreate(1,sizeof(bool));
+    newPidParamsQueueHandler = xQueueCreate(1, sizeof(pid_settings_comms_t));
+    newCommandQueueHandler = xQueueCreate(1,  sizeof(command_app_raw_t));
+    motorControlQueueHandler = xQueueCreate(1, sizeof(output_motors_t));
+    mpu6050QueueHandler = xQueueCreate(1, sizeof(vector_queue_t));
+    socketConnectionStateQueueHandler = xQueueCreate(1, sizeof(uint8_t));
+    networkStateQueueHandler = xQueueCreate(1, sizeof(bool));
     #ifdef HARDWARE_HOVERROBOT
         newMcbQueueHandler = xQueueCreate(1,sizeof(rx_motor_control_board_t));
     #endif
     
-    xTaskCreate(statusLedHandler,"status led handler",2048,appConnectionStateQueueHandler,2,NULL);
+    xTaskCreate(statusLedHandler,"status led handler",2048,socketConnectionStateQueueHandler,2,NULL);
     setStatusRobot(STATUS_ROBOT_INIT);
 
     #ifdef HARDWARE_HOVERROBOT
@@ -694,7 +702,7 @@ void app_main() {
         .priorityTask = MPU_HANDLER_PRIORITY,
         .core = IMU_HANDLER_CORE
     };
-    mpu6050_initialize(&configMpu);
+    // mpu6050_initialize(&configMpu);
 
     pid_init_t pidConfig;
     pidConfig.sampleTimeInMs = PERIOD_IMU_MS;
@@ -727,10 +735,14 @@ void app_main() {
 
     // esp_log_level_set("wifi", ESP_LOG_WARN);
     // esp_log_level_set("wifi_init", ESP_LOG_WARN);
-    initWifi(ESP_WIFI_SSID, ESP_WIFI_PASS, WIFI_MODE_STA, appConnectionStateQueueHandler);
+    #ifdef NETWORK_WIFI_MODE_AP
+        initWifi(ESP_WIFI_SSID, ESP_WIFI_PASS, WIFI_MODE_AP, networkStateQueueHandler);
+    #else
+        initWifi(ESP_WIFI_SSID, ESP_WIFI_PASS, WIFI_MODE_STA, networkStateQueueHandler);
+    #endif
+    
     // initTcpClientSocket(appConnectionStateQueueHandler);
-
-    initTcpServerSocket(appConnectionStateQueueHandler);
+    initTcpServerSocket(socketConnectionStateQueueHandler);
 
     setStatusRobot(STATUS_ROBOT_ARMED);
     xTaskCreatePinnedToCore(imuControlHandler,"Imu Control",4096,NULL,IMU_HANDLER_PRIORITY,&imuTaskHandler,IMU_HANDLER_CORE);

@@ -85,8 +85,8 @@ void statusLedHandler(void *pvParameters) {
     CRGB* ws2812_buffer;
     status_led_state_t newLedStatus;
     const uint8_t MAX_BRIGHTNESS = 100;
-    uint8_t fadeIntensity = 0, fadeSpeed = SPEED_FADE_DISCONNECTED;
-    bool fadeIn = true, connectionState = false;
+    uint8_t fadeIntensity = 0, fadeSpeed = SPEED_FADE_DISCONNECTED, socketClientsConnected = 0;
+    bool fadeIn = true;
     const char *TAG = "StatusLedHandler";
 
     QueueHandle_t connectionStateQueueHandler = (QueueHandle_t)pvParameters;
@@ -102,10 +102,9 @@ void statusLedHandler(void *pvParameters) {
     }
 
     while(true) {
-        
         xQueueReceive(statusLedQueue,&newLedStatus,0);
-        xQueuePeek(connectionStateQueueHandler,&connectionState,0); 
-        fadeSpeed = (connectionState) ? SPEED_FADE_CONNECTED : SPEED_FADE_DISCONNECTED;
+        xQueuePeek(connectionStateQueueHandler, &socketClientsConnected, 0); 
+        fadeSpeed = (socketClientsConnected > 0) ? SPEED_FADE_CONNECTED : SPEED_FADE_DISCONNECTED;
 
         if (fadeIn) {
             fadeIntensity += fadeSpeed;
