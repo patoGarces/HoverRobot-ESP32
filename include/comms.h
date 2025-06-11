@@ -21,8 +21,7 @@ enum CommandsToRobot {
     COMMAND_DEARMED_ROBOT,
     COMMAND_CLEAN_WHEELS,
     COMMAND_VIBRATION_TEST,
-    COMMAND_MOVE_FORWARD,
-    COMMAND_MOVE_BACKWARD,
+    COMMAND_MOVE_DISTANCE,
     COMMAND_MOVE_ABS_YAW,
     COMMAND_MOVE_REL_YAW
 };
@@ -53,13 +52,13 @@ enum CommandsToRobot {
 } pid_settings_comms_t;
 
 /**
- * @brief Estructura de datos de control recibida de la app
+ * @brief Estructura de datos de control de velocidad
  */
- typedef struct {
+typedef struct {
     uint16_t headerPackage;
-    int16_t  axisX;
-    int16_t  axisY;
-} control_app_raw_t;
+    int16_t  angular_vel;               // en m/s
+    int16_t  linear_vel;                // en rad/s
+} velocity_command_t;
 
 /**
  * @brief Estructura de datos de comandos recibida de la app
@@ -106,14 +105,6 @@ typedef struct {
     uint16_t safetyLimits;
     pid_params_raw_t pid[CANT_PIDS];
 } robot_local_configs_comms_t;
-
-/**
- * @brief Estructura de datos para comandos de movimiento
- */
-typedef struct {
-    uint16_t headerPackage;
-    int16_t  distanceInMts;
-} command_move_position_t;
 
 void comms_start_up(void);
 void sendDynamicData(robot_dynamic_data_t status);

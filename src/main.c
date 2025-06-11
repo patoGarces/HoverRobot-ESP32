@@ -21,7 +21,7 @@
 #endif
 
 /* Incluyo componentes */
-#include "tcp_socket_server.h"
+#include "tcp_socket_component.h"
 
 #if defined(HARDWARE_HOVERROBOT)
     #include "CAN_MCB.h"
@@ -228,7 +228,6 @@ static void imuControlHandler(void *pvParameters) {
             statusRobot.actualPitch = newAngles.angles[ANGLE_PITCH];
             statusRobot.actualYaw = newAngles.angles[ANGLE_YAW];
             statusRobot.tempImu = (uint16_t)newAngles.temp;
-
             
             int16_t meanSpeedMeas = (statusRobot.speedMeasR - statusRobot.speedMeasL) / 20.00;       // velocidad maxima deberia ser 1000
             float desiredAngleControl = (float)(pidCalculate(PID_SPEED, meanSpeedMeas) * MAX_ANGLE_CONTROL); 
@@ -298,7 +297,7 @@ static void imuControlHandler(void *pvParameters) {
 }
 
 static void attitudeControl(void *pvParameters){
-    float desiredSpeedControl = 0.00;
+    float targetLinearVel = 0.00;       // velocidad lineal en m/s * 10
     uint8_t isYawControlEnabled = false;
 
     const char *TAG = "AttitudeControlTask";
@@ -307,7 +306,7 @@ static void attitudeControl(void *pvParameters){
 
         if (statusRobot.statusCode == STATUS_ROBOT_STABILIZED) {
 
-            if (!statusRobot.dirControl.joyAxisX) {     // Yaw control
+            if (!statusRobot.dirControl.angularVel) {     // Yaw control
 
                 if (!isYawControlEnabled) { 
                     attitudeControlStat.setPointYaw = statusRobot.actualYaw;
@@ -326,12 +325,13 @@ static void attitudeControl(void *pvParameters){
             else {
                 isYawControlEnabled = false;
                 pidSetDisable(PID_YAW);
-                // Yaw manual control
-                attitudeControlMotor.motorR = (statusRobot.dirControl.joyAxisX / 100.00) * MAX_ROTATION_RATE_CONTROL;
+                // Yaw manual control: Convierto la velocidad angular rad/s a velocidad de los motores para rotar a esa velocidad
+                float wheelLinearVelocity = (statusRobot.dirControl.angularVel / 100.00) * (WHEEL_BASE/2.00);
+                attitudeControlMotor.motorR = CONVERT_MPS_TO_RPM(wheelLinearVelocity);
                 attitudeControlMotor.motorL = attitudeControlMotor.motorR * -1;
             }
 
-            if (!statusRobot.dirControl.joyAxisY) {     // Pos control
+            if (!statusRobot.dirControl.linearVel) {     // Pos control
                 statusRobot.actualDistInCms = ((statusRobot.posInMetersL + statusRobot.posInMetersR) / 2) * 100.00;
 
                 if (attitudeControlStat.attMode != ATT_MODE_POS_CONTROL) {
@@ -343,10 +343,11 @@ static void attitudeControl(void *pvParameters){
                     ESP_LOGI(TAG,"Enable POS_CONTROL");
                 }
          
-                desiredSpeedControl = pidCalculate(PID_POS, statusRobot.actualDistInCms) * (MAX_VELOCITY_SPEED_CONTROL/10.00); 
+                targetLinearVel = pidCalculate(PID_POS, statusRobot.actualDistInCms) * (MAX_VELOCITY_SPEED_CONTROL/10.00); 
             }
-            else {
-                desiredSpeedControl = (statusRobot.dirControl.joyAxisY * MAX_VELOCITY_SPEED_CONTROL) / 1000.00;
+            else {              // ejemplo: 150 -> 1,5m/s
+                targetLinearVel = (CONVERT_MPS_TO_RPM(statusRobot.dirControl.linearVel / 100.00) / 10.00);     // TODO: optimizar calculo
+
                 if (attitudeControlStat.attMode != ATT_MODE_MANUAL_CONTROL) {
                     pidSetDisable(PID_POS);
                     statusRobot.localConfig.pids[PID_POS].setPoint = 0.00;
@@ -355,8 +356,8 @@ static void attitudeControl(void *pvParameters){
                 }
             }
 
-            statusRobot.localConfig.pids[PID_SPEED].setPoint = desiredSpeedControl;
-            pidSetSetPoint(PID_SPEED, desiredSpeedControl);
+            statusRobot.localConfig.pids[PID_SPEED].setPoint = targetLinearVel;
+            pidSetSetPoint(PID_SPEED, targetLinearVel);
         }
         else {
             if (isYawControlEnabled) {
@@ -373,7 +374,7 @@ static void commsManager(void *pvParameters) {
     bool networkState = false, lastNetworkState = false;
     pid_settings_comms_t    newPidSettings;
     command_app_raw_t       newCommand;
-    control_app_raw_t       newControl;
+    velocity_command_t       newControl;
 
     #ifdef HARDWARE_HOVERROBOT
         rx_motor_control_board_t receiveMcb;
@@ -384,8 +385,8 @@ static void commsManager(void *pvParameters) {
 
     while(true) {
         if (xQueueReceive(receiveControlQueueHandler,&newControl,0)) {
-            statusRobot.dirControl.joyAxisX = newControl.axisX;
-            statusRobot.dirControl.joyAxisY = newControl.axisY;
+            statusRobot.dirControl.linearVel = newControl.linear_vel;
+            statusRobot.dirControl.angularVel = newControl.angular_vel;
         }
         
         if (xQueueReceive(newPidParamsQueueHandler,&newPidSettings,0)) {
@@ -425,16 +426,9 @@ static void commsManager(void *pvParameters) {
                     sendLocalConfig(statusRobot.localConfig);
                 break;
 
-                case COMMAND_MOVE_FORWARD:
-                    ESP_LOGI(TAG,"Move forward command, distance: %f",newCommand.value / PRECISION_DECIMALS_COMMS);
+                case COMMAND_MOVE_DISTANCE:
+                    ESP_LOGI(TAG,"Move distance command, distance: %f",newCommand.value / PRECISION_DECIMALS_COMMS);
                     attitudeControlStat.setPointPosCms += newCommand.value;
-                    statusRobot.localConfig.pids[PID_POS].setPoint = attitudeControlStat.setPointPosCms;
-                    pidSetSetPoint(PID_POS,attitudeControlStat.setPointPosCms);
-                break;
-
-                case COMMAND_MOVE_BACKWARD:
-                    ESP_LOGI(TAG,"Move backward command, distance: %f",newCommand.value / PRECISION_DECIMALS_COMMS);
-                    attitudeControlStat.setPointPosCms -= newCommand.value;
                     statusRobot.localConfig.pids[PID_POS].setPoint = attitudeControlStat.setPointPosCms;
                     pidSetSetPoint(PID_POS,attitudeControlStat.setPointPosCms);
                 break;
@@ -627,7 +621,7 @@ void app_main() {
     // gpio_set_direction(PIN_OSCILO , GPIO_MODE_OUTPUT);
     // gpio_set_level(PIN_OSCILO, 1);
 
-    receiveControlQueueHandler = xQueueCreate(1, sizeof(control_app_raw_t));
+    receiveControlQueueHandler = xQueueCreate(1, sizeof(velocity_command_t));
     newPidParamsQueueHandler = xQueueCreate(1, sizeof(pid_settings_comms_t));
     newCommandQueueHandler = xQueueCreate(1,  sizeof(command_app_raw_t));
     motorControlQueueHandler = xQueueCreate(1, sizeof(output_motors_t));
@@ -702,7 +696,7 @@ void app_main() {
         .priorityTask = MPU_HANDLER_PRIORITY,
         .core = IMU_HANDLER_CORE
     };
-    // mpu6050_initialize(&configMpu);
+    mpu6050_initialize(&configMpu);
 
     pid_init_t pidConfig;
     pidConfig.sampleTimeInMs = PERIOD_IMU_MS;
@@ -740,7 +734,7 @@ void app_main() {
     #else
         initWifi(ESP_WIFI_SSID, ESP_WIFI_PASS, WIFI_MODE_STA, networkStateQueueHandler);
     #endif
-    
+
     // initTcpClientSocket(appConnectionStateQueueHandler);
     initTcpServerSocket(socketConnectionStateQueueHandler);
 

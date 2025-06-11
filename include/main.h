@@ -10,8 +10,8 @@
 #define HARDWARE_MAINBOARD 
 // #define HARDWARE_SPLITBOARD
 
-// #define NETWORK_WIFI_MODE_AP
-#define NETWORK_WIFI_MODE_STA
+#define NETWORK_WIFI_MODE_AP
+// #define NETWORK_WIFI_MODE_STA
 
 #define PERIOD_IMU_MS           100
 #define MPU_HANDLER_PRIORITY    5//configMAX_PRIORITIES - 1
@@ -102,7 +102,10 @@
     #define STEPS_PER_REV       90.00                   // 90 steps por vuelta
     #define DIST_PER_REV        0.5310707511            // diam 17cm * pi = 53.10707 cms = 0.5310707511 mts
 
+    #define WHEEL_BASE          0.32    // distancia entre ruedas en metros
+
     #define CONVERT_RPM_TO_MPS(rpm) (rpm * DIST_PER_REV) / 60.00    
+    #define CONVERT_MPS_TO_RPM(mps) (mps * 60.00) / DIST_PER_REV
 
     #define INVERT_HALL_SIDE        // Invierte el sensor R con el L(depende de la ubicacion fisica de la MCB)
 
@@ -203,9 +206,9 @@ typedef struct {
 } pid_floats_t;
 
 typedef struct {
-    int16_t joyAxisX;
-    int16_t joyAxisY;
-} direction_control_t;
+    int16_t angularVel;             // en rad/s *100 ie: 200 = 2,00 rad/s
+    int16_t linearVel;              // en m/s *100 ie: 125 = 1,25 m/s
+} velocity_control_t;
 
 /**
  * @brief Estructura de datos enviada a la app, contiene settings locales
@@ -240,7 +243,7 @@ typedef struct {
     int16_t                 currentL;
     float                   actualDistInCms;
     float                   outputYawControl;
-    direction_control_t     dirControl;
+    velocity_control_t      dirControl;
     robot_local_configs_t   localConfig;
     uint16_t                statusCode;
 } status_robot_t;

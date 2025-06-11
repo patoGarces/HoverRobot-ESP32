@@ -4,3 +4,6 @@
 [submodule "components/WS2812"]
 	path = components/WS2812
 	url = https://github.com/okhsunrog/esp_ws28xx.git
+[submodule "components/TCP_SOCKETS"]
+	path = components/TCP_SOCKETS
+	url = https://github.com/patoGarces/TCP_SOCKETS_ESPIDF.git

@@ -38,7 +38,7 @@ static void communicationHandler(void * param) {
     uint16_t contTimeout = 0;
     pid_settings_app_raw_t      newPidSettingsRaw;
     pid_settings_comms_t        pidSettingsComms;
-    control_app_raw_t           newControlVal;
+    velocity_command_t          newControlVal;
     command_app_raw_t           newCommand;
     
     while(true) {
@@ -83,8 +83,8 @@ static void communicationHandler(void * param) {
         vTaskDelay(pdMS_TO_TICKS(10));  
         contTimeout++;
         if (contTimeout > TIMEOUT_COMMS) {
-            newControlVal.axisX = 0;
-            newControlVal.axisY = 0;
+            newControlVal.linear_vel = 0;
+            newControlVal.angular_vel = 0;
             xQueueSend(receiveControlQueueHandler,(void*)&newControlVal,0);
         }
     }
