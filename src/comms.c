@@ -62,11 +62,11 @@ static void communicationHandler(void * param) {
                 break;
 
                 case HEADER_PACKAGE_CONTROL:
-                    // if (bytes_received == sizeof(newControlVal)) {  
-                    memcpy(&newControlVal,received_data,sizeof(newControlVal));//bytes_received);
-                    contTimeout = 0;
-                    xQueueSend(receiveControlQueueHandler,(void*)&newControlVal,0);
-
+                    if (bytes_received == sizeof(newControlVal)) {  
+                        memcpy(&newControlVal,received_data,sizeof(newControlVal));
+                        contTimeout = 0; 
+                        xQueueSend(receiveControlQueueHandler,(void*)&newControlVal,0);
+                    }
                 break;
 
                 case HEADER_PACKAGE_COMMAND:
@@ -76,17 +76,20 @@ static void communicationHandler(void * param) {
                     }
                 break;
                 default:
-                    ESP_LOGE(TAG, "\n\nComando no reconocido: %x\n\n",headerPackage); 
+                    ESP_LOGE(TAG, "Comando no reconocido: %x\n\n",headerPackage); 
                 break;
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(10));  
-        contTimeout++;
-        if (contTimeout > TIMEOUT_COMMS) {
+         
+        if (contTimeout > FAILSAFE_TIMEOUT) {
             newControlVal.linear_vel = 0;
             newControlVal.angular_vel = 0;
             xQueueSend(receiveControlQueueHandler,(void*)&newControlVal,0);
+        } else {
+            contTimeout++;
         }
+
+        vTaskDelay(pdMS_TO_TICKS(10)); 
     }
     vTaskDelete(NULL);
 }

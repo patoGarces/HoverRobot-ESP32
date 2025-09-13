@@ -227,7 +227,7 @@ static void imuControlHandler(void *pvParameters) {
             statusRobot.actualRoll = newAngles.angles[ANGLE_ROLL];
             statusRobot.actualPitch = newAngles.angles[ANGLE_PITCH];
             statusRobot.actualYaw = newAngles.angles[ANGLE_YAW];
-            statusRobot.tempImu = (uint16_t)newAngles.temp;
+            statusRobot.tempImu = newAngles.temp;
             
             int16_t meanSpeedMeas = (statusRobot.speedMeasR - statusRobot.speedMeasL) / 20.00;       // velocidad maxima deberia ser 1000
             float desiredAngleControl = (float)(pidCalculate(PID_SPEED, meanSpeedMeas) * MAX_ANGLE_CONTROL); 
@@ -235,7 +235,7 @@ static void imuControlHandler(void *pvParameters) {
             statusRobot.localConfig.pids[PID_ANGLE].setPoint = desiredAngleControl;
             pidSetSetPoint(PID_ANGLE, desiredAngleControl);
 
-            int16_t outputPidMotors = (uint16_t)(pidCalculate(PID_ANGLE,statusRobot.actualPitch) * MAX_VELOCITY); 
+            int16_t outputPidMotors = (uint16_t)(pidCalculate(PID_ANGLE,statusRobot.actualPitch) * MAX_VELOCITY_RPM); 
 
             speedMotors.motorL = cutSpeedRange(outputPidMotors + attitudeControlMotor.motorL) * DIRECTION_L_MOTOR;
             speedMotors.motorR = cutSpeedRange(outputPidMotors + attitudeControlMotor.motorR) * DIRECTION_R_MOTOR;
@@ -297,7 +297,7 @@ static void imuControlHandler(void *pvParameters) {
 }
 
 static void attitudeControl(void *pvParameters){
-    float targetLinearVel = 0.00;       // velocidad lineal en m/s * 10
+    float targetLinearRpm = 0.00;       // velocidad lineal en RPM * 10
     uint8_t isYawControlEnabled = false;
 
     const char *TAG = "AttitudeControlTask";
@@ -343,11 +343,14 @@ static void attitudeControl(void *pvParameters){
                     ESP_LOGI(TAG,"Enable POS_CONTROL");
                 }
          
-                targetLinearVel = pidCalculate(PID_POS, statusRobot.actualDistInCms) * (MAX_VELOCITY_SPEED_CONTROL/10.00); 
+                targetLinearRpm = (pidCalculate(PID_POS, statusRobot.actualDistInCms) * MAX_VELOCITY_RPM_CONTROL) / 10.00; 
             }
-            else {              // ejemplo: 150 -> 1,5m/s
-                targetLinearVel = (CONVERT_MPS_TO_RPM(statusRobot.dirControl.linearVel / 100.00) / 10.00);     // TODO: optimizar calculo
+            else {
+                float linearVelMps = statusRobot.dirControl.linearVel / 100.00;
+                linearVelMps = fmaxf(-MAX_VELOCITY_MPS_CONTROL, fminf(MAX_VELOCITY_MPS_CONTROL, linearVelMps)); // Limito la velocidad maxima permitida
 
+                // targetLinearVel = CONVERT_MPS_TO_RPM(statusRobot.dirControl.linearVel / 10.00);     // TODO: es linearVel /100(normalizo) * 10 (para que de en m/s *10)
+                targetLinearRpm = CONVERT_MPS_TO_RPM(linearVelMps) / 10.00; 
                 if (attitudeControlStat.attMode != ATT_MODE_MANUAL_CONTROL) {
                     pidSetDisable(PID_POS);
                     statusRobot.localConfig.pids[PID_POS].setPoint = 0.00;
@@ -356,8 +359,8 @@ static void attitudeControl(void *pvParameters){
                 }
             }
 
-            statusRobot.localConfig.pids[PID_SPEED].setPoint = targetLinearVel;
-            pidSetSetPoint(PID_SPEED, targetLinearVel);
+            statusRobot.localConfig.pids[PID_SPEED].setPoint = targetLinearRpm;
+            pidSetSetPoint(PID_SPEED, targetLinearRpm);
         }
         else {
             if (isYawControlEnabled) {
@@ -435,7 +438,7 @@ static void commsManager(void *pvParameters) {
 
                 case COMMAND_MOVE_ABS_YAW:
                     float yawAngle = (uint16_t)newCommand.value / PRECISION_DECIMALS_COMMS;
-                    ESP_LOGI(TAG,"Move absolute angle: %f, commandValue: %d",yawAngle,newCommand.value);
+                    ESP_LOGI(TAG,"Move absolute angle: %f",yawAngle);
                     attitudeControlStat.setPointYaw = yawAngle;
                     statusRobot.localConfig.pids[PID_YAW].setPoint = attitudeControlStat.setPointYaw;
                     pidSetSetPoint(PID_YAW, attitudeControlStat.setPointYaw / 1.8);

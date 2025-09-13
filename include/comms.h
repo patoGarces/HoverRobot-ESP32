@@ -5,7 +5,7 @@
 #include "main.h"
 #include "utils.h"
 
-#define TIMEOUT_COMMS           100                      // Timeout maximo sin recibir communicacion de la app, en ms * 10, ej: 15 = 150ms
+#define FAILSAFE_TIMEOUT                100             // Timeout maximo sin recibir communicacion de la app, en ms * 10, ej: 10 = 100ms
 
 #define HEADER_PACKAGE_STATUS           0xAB01          // key a enviar que indica que el paquete enviado a la app es un status
 #define HEADER_PACKAGE_CONTROL          0xAB02          // key que indica que el paquete recibido de la app es de control

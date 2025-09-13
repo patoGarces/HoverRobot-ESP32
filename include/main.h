@@ -29,9 +29,9 @@
 #define TIME_CLEAN_WHEELS_MS        3000
 #define SPEED_CLEAN_WHEELS_MS       100
 
-#define MAX_VELOCITY                1000.00
+#define MAX_VELOCITY_RPM            1000.00
 #define MAX_CYCLES_LIMIT_SPEED      10
-#define MAX_VELOCITY_SPEED_CONTROL  300.00//500.00         // Velocidad maxima permitida OJO: NO PUEDE SER > 999 (para prevenir la proteccion de LIMIT_SPEED)
+#define MAX_VELOCITY_MPS_CONTROL    1.5                 // Velocidad maxima para control en m/s
 
 #define MIN_PITCH_ARMED             1.00
 #define MIN_ROLL_ARMED              5.00
@@ -106,6 +106,8 @@
 
     #define CONVERT_RPM_TO_MPS(rpm) (rpm * DIST_PER_REV) / 60.00    
     #define CONVERT_MPS_TO_RPM(mps) (mps * 60.00) / DIST_PER_REV
+
+    #define MAX_VELOCITY_RPM_CONTROL    CONVERT_MPS_TO_RPM(1.5)    // Velocidad maxima para control en RPM
 
     #define INVERT_HALL_SIDE        // Invierte el sensor R con el L(depende de la ubicacion fisica de la MCB)
 
@@ -227,9 +229,9 @@ typedef struct {
     uint8_t                 isMcbConnected;
     uint16_t                batVoltage;
     uint16_t                batPercent;
-    uint16_t                tempImu;
-    uint16_t                tempMcb;
-    uint16_t                tempMainboard;
+    float                   tempImu;
+    float                   tempMcb;
+    float                   tempMainboard;
     int16_t                 speedR;
     int16_t                 speedL;
     float                   actualPitch;
