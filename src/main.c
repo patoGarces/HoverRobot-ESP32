@@ -49,12 +49,14 @@ struct {
     float   setPointPosCms; 
     float   setPointSpeed;
     float   setPointYaw;
+    float   offsetDistInCms;
     uint8_t contSafetyMaxSpeed;
 } attitudeControlStat = {
     .attMode = ATT_MODE_ATTI,
     .setPointPosCms = 0.00,
     .setPointSpeed = 0.00,
     .setPointYaw = 0.00,
+    .offsetDistInCms = 0.00
 };
 
 float pos2mts(int32_t steps) {
@@ -127,6 +129,10 @@ void setStatusRobot(uint8_t newStatus) {
                 statusRobot.speedR = 0;
                 speedMotors.motorL = 0;
                 speedMotors.motorR = 0;
+
+                attitudeControlStat.offsetDistInCms = (statusRobot.posInMetersL + statusRobot.posInMetersR) / 2.00;
+                statusRobot.actualDistInCms = 0.00;
+
 
                 attitudeControlStat.attMode = ATT_MODE_ATTI;
                 attitudeControlMotor.motorL = 0;
@@ -332,8 +338,6 @@ static void attitudeControl(void *pvParameters){
             }
 
             if (!statusRobot.dirControl.linearVel) {     // Pos control
-                statusRobot.actualDistInCms = ((statusRobot.posInMetersL + statusRobot.posInMetersR) / 2) * 100.00;
-
                 if (attitudeControlStat.attMode != ATT_MODE_POS_CONTROL) {
                     attitudeControlStat.setPointPosCms = statusRobot.actualDistInCms;           // TODO: podria setearlo cuando llegue a 0 la velocidad de los motores
                     statusRobot.localConfig.pids[PID_POS].setPoint = statusRobot.actualDistInCms;
@@ -484,6 +488,12 @@ static void commsManager(void *pvParameters) {
                 statusRobot.currentL = receiveMcb.currentL;
                 statusRobot.posInMetersR = pos2mts(receiveMcb.posR);
                 statusRobot.posInMetersL = pos2mts(receiveMcb.posL * -1);
+
+
+                float actual = (((statusRobot.posInMetersL + statusRobot.posInMetersR) / 2) - attitudeControlStat.offsetDistInCms);
+                statusRobot.actualDistInCms = actual * 100.00;
+                
+                ESP_LOGI("testPos", "pos result: %f, actual: %f, offset: %f", statusRobot.actualDistInCms, actual, attitudeControlStat.offsetDistInCms);
             }
         #elif defined(HARDWARE_PROTOTYPE)
             motors_measurements_t newMeasureMotors = getMeasMotors();
@@ -521,7 +531,9 @@ static void commsManager(void *pvParameters) {
                 .pitch =  statusRobot.actualPitch * PRECISION_DECIMALS_COMMS,
                 .roll = statusRobot.actualRoll * PRECISION_DECIMALS_COMMS,
                 .yaw = statusRobot.actualYaw * PRECISION_DECIMALS_COMMS,
-                .posInMeters = ((statusRobot.posInMetersL + statusRobot.posInMetersR) / 2) * PRECISION_DECIMALS_COMMS,
+
+                
+                .posInMeters = statusRobot.actualDistInCms,
                 .outputYawControl = statusRobot.outputYawControl * PRECISION_DECIMALS_COMMS,
                 .setPointAngle = statusRobot.localConfig.pids[PID_ANGLE].setPoint * PRECISION_DECIMALS_COMMS,
                 .setPointPos = statusRobot.localConfig.pids[PID_POS].setPoint,                                          // No lo multiplico, para mandarlo en mts
