@@ -5,8 +5,10 @@
 #include "esp_mac.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
+#include "lwip/ip4_addr.h"
 #include "esp_log.h"
 #include <string.h>
+#include "main.h"
 
 /* The event group allows multiple bits for each event, but we only care about two events:
  * - we are connected to the AP with an IP
@@ -17,33 +19,65 @@
 #define EXAMPLE_ESP_WIFI_CHANNEL 1
 #define EXAMPLE_MAX_STA_CONN 2
 
-#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA2_PSK // WIFI_AUTH_WPA_WPA2_PSK//WIFI_AUTH_WPA2_PSK
-#define EXAMPLE_ESP_MAXIMUM_RETRY 30
+#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA2_PSK
 
 /* FreeRTOS event group to signal when we are connected*/
 static EventGroupHandle_t s_wifi_event_group;
 
 static const char *TAG = "WIFI HANDLER";
 
-static void wifi_event_handler_ap(void *arg, esp_event_base_t event_base,
-                               int32_t event_id, void *event_data) {
-
-    // QueueHandle_t connectionStateQueueHandler = (QueueHandle_t)arg;      // TODO: implementar queue de coneccion wifi
-
-    if (event_id == WIFI_EVENT_AP_STACONNECTED)
-    {
-        wifi_event_ap_staconnected_t *event = (wifi_event_ap_staconnected_t *)event_data;
-        ESP_LOGI(TAG, "station " MACSTR " join, AID=%d", MAC2STR(event->mac), event->aid);
-    }
-    else if (event_id == WIFI_EVENT_AP_STADISCONNECTED)
-    {
-        wifi_event_ap_stadisconnected_t *event = (wifi_event_ap_stadisconnected_t *)event_data;
-        ESP_LOGI(TAG, "station " MACSTR " leave, AID=%d", MAC2STR(event->mac), event->aid);
-        // newConnectionState(connectionStateQueueHandler,false); // wifi desconectado              // TODO: implementar queue de coneccion wifi
+static void updateConnectionState(QueueHandle_t stateQueueHandler, bool state) {
+    if (xQueueOverwrite(stateQueueHandler, &state) != pdPASS) {
+        ESP_LOGE(TAG, "Error al enviar el nuevo estado de network");
     }
 }
 
-void wifi_init_softap(QueueHandle_t connectionStateQueueHandler, const char *ssidRed, const char *passRed) {
+/* 
+ * Metodo para asignar una ip fija al propio ESP 
+ */
+void configureAPWithStaticIP() {
+    esp_netif_ip_info_t ip_info;
+
+    esp_netif_t* netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+
+    // Detener DHCP server
+    esp_netif_dhcps_stop(netif);
+
+    ip4_addr_t temp_ip;
+    ip4addr_aton("192.168.0.101", &temp_ip);
+    ip_info.ip.addr = temp_ip.addr;
+    ip_info.gw.addr = temp_ip.addr;
+    IP4_ADDR(&ip_info.netmask, 255, 255, 255, 0);
+
+    // Configurar IP estática
+    // IP4_ADDR(&ip_info.ip, 192, 168, 0, 101);        // IP del ESP32
+    // IP4_ADDR(&ip_info.gw, 192, 168, 0, 101);         // Gateway igual
+    // IP4_ADDR(&ip_info.netmask, 255, 255, 255, 0);
+    
+
+    esp_netif_set_ip_info(netif, &ip_info);
+
+    // Reiniciar DHCP server
+    esp_netif_dhcps_start(netif);
+}
+
+static void wifi_event_handler_ap(void *arg, esp_event_base_t event_base,
+                               int32_t event_id, void *event_data) {
+
+    QueueHandle_t networkStateHandler = (QueueHandle_t)arg;
+
+    if (event_id == WIFI_EVENT_AP_STACONNECTED) {
+        wifi_event_ap_staconnected_t *event = (wifi_event_ap_staconnected_t *)event_data;
+        ESP_LOGI(TAG, "station " MACSTR " join, AID=%d", MAC2STR(event->mac), event->aid);
+        updateConnectionState(networkStateHandler, true); // wifi conectado
+    } else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) {
+        wifi_event_ap_stadisconnected_t *event = (wifi_event_ap_stadisconnected_t *)event_data;
+        ESP_LOGI(TAG, "station " MACSTR " leave, AID=%d", MAC2STR(event->mac), event->aid);
+        updateConnectionState(networkStateHandler, false); // wifi desconectado
+    }
+}
+
+void wifi_init_softap(QueueHandle_t networkStateHandler, const char *ssidRed, const char *passRed) {
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_create_default_wifi_ap();
@@ -54,7 +88,7 @@ void wifi_init_softap(QueueHandle_t connectionStateQueueHandler, const char *ssi
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
                                                         ESP_EVENT_ANY_ID,
                                                         &wifi_event_handler_ap,
-                                                        connectionStateQueueHandler,
+                                                        networkStateHandler,
                                                         NULL));
 
     wifi_config_t wifi_config = {
@@ -71,23 +105,23 @@ void wifi_init_softap(QueueHandle_t connectionStateQueueHandler, const char *ssi
     const uint8_t lenSSID = strlen((const char *)ssidRed);
     const uint8_t lenPass = strlen((const char *)passRed);
 
-    wifi_config.ap.ssid_len = lenPass;
+    wifi_config.ap.ssid_len = lenSSID;
 
     strncpy((char *)wifi_config.ap.ssid, ssidRed, lenSSID);
     wifi_config.ap.ssid[lenSSID] = '\0';
 
-    if (lenPass != 0)
-    {
+    if (lenPass != 0) {
         strncpy((char *)wifi_config.ap.password, passRed, lenPass);
         wifi_config.ap.password[lenPass] = '\0';
-    }
-    else
-    {
+    } else {
         wifi_config.ap.authmode = WIFI_AUTH_OPEN;
     }
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
+
+    configureAPWithStaticIP();
+
     ESP_ERROR_CHECK(esp_wifi_start());
 
     ESP_LOGI(TAG, "wifi_init_softap success -> SSID:%s password:%s channel:%d",
@@ -97,32 +131,23 @@ void wifi_init_softap(QueueHandle_t connectionStateQueueHandler, const char *ssi
 static void wifi_event_handler_sta(void *arg, esp_event_base_t event_base,
                            int32_t event_id, void *event_data) {
 
-    static uint8_t wifiSTARetryConnect = 0;
+    QueueHandle_t networkStateHandler = (QueueHandle_t)arg;
+
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
-    }
-    else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        if (wifiSTARetryConnect < EXAMPLE_ESP_MAXIMUM_RETRY) {
-            esp_wifi_connect();
-            wifiSTARetryConnect++;
-            ESP_LOGI(TAG, "retry to connect to the AP");
-        }
-        else {
-            ESP_LOGI(TAG, "unable to connect to the AP");
-            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-        }
-        ESP_LOGI(TAG, "connect to the AP fail");
-    }
-    else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        updateConnectionState(networkStateHandler, false);
+        esp_wifi_connect();
+        ESP_LOGI(TAG, "retry to connect to the AP");
+    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        updateConnectionState(networkStateHandler, true);
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
-        wifiSTARetryConnect = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
 }
 
-void wifi_init_sta(QueueHandle_t connectionStateQueueHandler, const char *ssidRed, const char *passRed)
-{
+void wifi_init_sta(QueueHandle_t networkStateQueueHandler, const char *ssidRed, const char *passRed) {
     s_wifi_event_group = xEventGroupCreate();
 
     ESP_ERROR_CHECK(esp_netif_init());
@@ -138,12 +163,12 @@ void wifi_init_sta(QueueHandle_t connectionStateQueueHandler, const char *ssidRe
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
                                                         ESP_EVENT_ANY_ID,
                                                         &wifi_event_handler_sta,
-                                                        NULL,
+                                                        networkStateQueueHandler,
                                                         &instance_any_id));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
                                                         IP_EVENT_STA_GOT_IP,
                                                         &wifi_event_handler_sta,
-                                                        NULL,
+                                                        networkStateQueueHandler,
                                                         &instance_got_ip));
 
     wifi_config_t wifi_config = {
@@ -189,14 +214,9 @@ void wifi_init_sta(QueueHandle_t connectionStateQueueHandler, const char *ssidRe
     else {
         ESP_LOGE(TAG, "UNEXPECTED EVENT");
     }
-
-    /* The event will not be processed after unregister */
-    ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip));
-    ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
-    vEventGroupDelete(s_wifi_event_group);
 }
 
-void initWifi(char *ssidRed, char *passRed, wifi_mode_t wifiMode, QueueHandle_t connectionStateQueueHandler) {
+void initWifi(char *ssidRed, char *passRed, wifi_mode_t wifiMode, QueueHandle_t networkStateQueueHandler) {
 
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -206,9 +226,9 @@ void initWifi(char *ssidRed, char *passRed, wifi_mode_t wifiMode, QueueHandle_t 
     ESP_ERROR_CHECK(ret);
 
     if (wifiMode == WIFI_MODE_AP) {
-        wifi_init_softap(connectionStateQueueHandler, ssidRed, passRed);
+        wifi_init_softap(networkStateQueueHandler, ssidRed, passRed);
     }
     else {
-        wifi_init_sta(connectionStateQueueHandler, ssidRed, passRed);
+        wifi_init_sta(networkStateQueueHandler, ssidRed, passRed);
     }
 }

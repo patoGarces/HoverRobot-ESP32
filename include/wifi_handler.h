@@ -5,6 +5,6 @@
 #include "stdint.h"
 #include "freertos/queue.h"
 
-void initWifi(char *ssidRed, char* passRed, wifi_mode_t wifiMode, QueueHandle_t connectionStateQueueHandler);
+void initWifi(char *ssidRed, char* passRed, wifi_mode_t wifiMode, QueueHandle_t networkStateQueueHandler);
 
 #endif

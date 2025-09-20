@@ -5,12 +5,12 @@
 #include "main.h"
 #include "utils.h"
 
-#define TIMEOUT_COMMS           100                      // Timeout maximo sin recibir communicacion de la app, en ms * 10, ej: 15 = 150ms
+#define FAILSAFE_TIMEOUT                100             // Timeout maximo sin recibir communicacion de la app, en ms * 10, ej: 10 = 100ms
 
 #define HEADER_PACKAGE_STATUS           0xAB01          // key a enviar que indica que el paquete enviado a la app es un status
 #define HEADER_PACKAGE_CONTROL          0xAB02          // key que indica que el paquete recibido de la app es de control
 #define HEADER_PACKAGE_SETTINGS         0xAB03          // key que indica que el paquete recibido de la app es de configuracion
-#define HEADER_PACKAGE_COMMAND          0xAB04          // key que indica que el paquete a enviar es un comando
+#define HEADER_PACKAGE_COMMAND          0xAB04          // key que indica que el paquete recibido de la app es un comando
 
 #define HEADER_PACKAGE_LOCAL_CONFIG     0xAB05          // key que indica que el paquete a enviar es una setting local
 
@@ -21,8 +21,7 @@ enum CommandsToRobot {
     COMMAND_DEARMED_ROBOT,
     COMMAND_CLEAN_WHEELS,
     COMMAND_VIBRATION_TEST,
-    COMMAND_MOVE_FORWARD,
-    COMMAND_MOVE_BACKWARD,
+    COMMAND_MOVE_DISTANCE,
     COMMAND_MOVE_ABS_YAW,
     COMMAND_MOVE_REL_YAW
 };
@@ -53,13 +52,13 @@ enum CommandsToRobot {
 } pid_settings_comms_t;
 
 /**
- * @brief Estructura de datos de control recibida de la app
+ * @brief Estructura de datos de control de velocidad
  */
- typedef struct {
+typedef struct {
     uint16_t headerPackage;
-    int16_t  axisX;
-    int16_t  axisY;
-} control_app_raw_t;
+    int16_t  angular_vel;               // en m/s
+    int16_t  linear_vel;                // en rad/s
+} velocity_command_t;
 
 /**
  * @brief Estructura de datos de comandos recibida de la app
@@ -106,14 +105,6 @@ typedef struct {
     uint16_t safetyLimits;
     pid_params_raw_t pid[CANT_PIDS];
 } robot_local_configs_comms_t;
-
-/**
- * @brief Estructura de datos para comandos de movimiento
- */
-typedef struct {
-    uint16_t headerPackage;
-    int16_t  distanceInMts;
-} command_move_position_t;
 
 void comms_start_up(void);
 void sendDynamicData(robot_dynamic_data_t status);

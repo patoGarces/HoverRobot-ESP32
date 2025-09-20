@@ -7,8 +7,8 @@
 #include "storage_flash.h"
 #include <string.h>
 
-extern StreamBufferHandle_t xStreamBufferReceiver;
-extern StreamBufferHandle_t xStreamBufferSender;
+StreamBufferHandle_t xStreamBufferReceiver;
+StreamBufferHandle_t xStreamBufferSender;
 
 // queues de recepcion externa
 extern QueueHandle_t newPidParamsQueueHandler;
@@ -38,7 +38,7 @@ static void communicationHandler(void * param) {
     uint16_t contTimeout = 0;
     pid_settings_app_raw_t      newPidSettingsRaw;
     pid_settings_comms_t        pidSettingsComms;
-    control_app_raw_t           newControlVal;
+    velocity_command_t          newControlVal;
     command_app_raw_t           newCommand;
     
     while(true) {
@@ -62,11 +62,11 @@ static void communicationHandler(void * param) {
                 break;
 
                 case HEADER_PACKAGE_CONTROL:
-                    // if (bytes_received == sizeof(newControlVal)) {  
-                    memcpy(&newControlVal,received_data,sizeof(newControlVal));//bytes_received);
-                    contTimeout = 0;
-                    xQueueSend(receiveControlQueueHandler,(void*)&newControlVal,0);
-
+                    if (bytes_received == sizeof(newControlVal)) {  
+                        memcpy(&newControlVal,received_data,sizeof(newControlVal));
+                        contTimeout = 0; 
+                        xQueueSend(receiveControlQueueHandler,(void*)&newControlVal,0);
+                    }
                 break;
 
                 case HEADER_PACKAGE_COMMAND:
@@ -76,17 +76,20 @@ static void communicationHandler(void * param) {
                     }
                 break;
                 default:
-                    ESP_LOGE(TAG, "\n\nComando no reconocido: %x\n\n",headerPackage); 
+                    ESP_LOGE(TAG, "Comando no reconocido: %x\n\n",headerPackage); 
                 break;
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(10));  
-        contTimeout++;
-        if (contTimeout > TIMEOUT_COMMS) {
-            newControlVal.axisX = 0;
-            newControlVal.axisY = 0;
+         
+        if (contTimeout > FAILSAFE_TIMEOUT) {
+            newControlVal.linear_vel = 0;
+            newControlVal.angular_vel = 0;
             xQueueSend(receiveControlQueueHandler,(void*)&newControlVal,0);
+        } else {
+            contTimeout++;
         }
+
+        vTaskDelay(pdMS_TO_TICKS(10)); 
     }
     vTaskDelete(NULL);
 }

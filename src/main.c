@@ -21,7 +21,7 @@
 #endif
 
 /* Incluyo componentes */
-#include "TCP_CLIENT.h"
+#include "tcp_socket_component.h"
 
 #if defined(HARDWARE_HOVERROBOT)
     #include "CAN_MCB.h"
@@ -33,7 +33,8 @@ QueueHandle_t newPidParamsQueueHandler;                     // Recibo nuevos par
 QueueHandle_t newCommandQueueHandler;
 QueueHandle_t receiveControlQueueHandler;
 QueueHandle_t newMcbQueueHandler;
-QueueHandle_t appConnectionStateQueueHandler;
+QueueHandle_t socketConnectionStateQueueHandler;
+QueueHandle_t networkStateQueueHandler;
 
 TaskHandle_t imuTaskHandler;
 
@@ -48,12 +49,14 @@ struct {
     float   setPointPosCms; 
     float   setPointSpeed;
     float   setPointYaw;
+    float   offsetDistInCms;
     uint8_t contSafetyMaxSpeed;
 } attitudeControlStat = {
     .attMode = ATT_MODE_ATTI,
     .setPointPosCms = 0.00,
     .setPointSpeed = 0.00,
     .setPointYaw = 0.00,
+    .offsetDistInCms = 0.00
 };
 
 float pos2mts(int32_t steps) {
@@ -126,6 +129,10 @@ void setStatusRobot(uint8_t newStatus) {
                 statusRobot.speedR = 0;
                 speedMotors.motorL = 0;
                 speedMotors.motorR = 0;
+
+                attitudeControlStat.offsetDistInCms = (statusRobot.posInMetersL + statusRobot.posInMetersR) / 2.00;
+                statusRobot.actualDistInCms = 0.00;
+
 
                 attitudeControlStat.attMode = ATT_MODE_ATTI;
                 attitudeControlMotor.motorL = 0;
@@ -226,8 +233,7 @@ static void imuControlHandler(void *pvParameters) {
             statusRobot.actualRoll = newAngles.angles[ANGLE_ROLL];
             statusRobot.actualPitch = newAngles.angles[ANGLE_PITCH];
             statusRobot.actualYaw = newAngles.angles[ANGLE_YAW];
-            statusRobot.tempImu = (uint16_t)newAngles.temp;
-
+            statusRobot.tempImu = newAngles.temp;
             
             int16_t meanSpeedMeas = (statusRobot.speedMeasR - statusRobot.speedMeasL) / 20.00;       // velocidad maxima deberia ser 1000
             float desiredAngleControl = (float)(pidCalculate(PID_SPEED, meanSpeedMeas) * MAX_ANGLE_CONTROL); 
@@ -235,7 +241,7 @@ static void imuControlHandler(void *pvParameters) {
             statusRobot.localConfig.pids[PID_ANGLE].setPoint = desiredAngleControl;
             pidSetSetPoint(PID_ANGLE, desiredAngleControl);
 
-            int16_t outputPidMotors = (uint16_t)(pidCalculate(PID_ANGLE,statusRobot.actualPitch) * MAX_VELOCITY); 
+            int16_t outputPidMotors = (uint16_t)(pidCalculate(PID_ANGLE,statusRobot.actualPitch) * MAX_VELOCITY_RPM); 
 
             speedMotors.motorL = cutSpeedRange(outputPidMotors + attitudeControlMotor.motorL) * DIRECTION_L_MOTOR;
             speedMotors.motorR = cutSpeedRange(outputPidMotors + attitudeControlMotor.motorR) * DIRECTION_R_MOTOR;
@@ -297,7 +303,7 @@ static void imuControlHandler(void *pvParameters) {
 }
 
 static void attitudeControl(void *pvParameters){
-    float desiredSpeedControl = 0.00;
+    float targetLinearRpm = 0.00;       // velocidad lineal en RPM * 10
     uint8_t isYawControlEnabled = false;
 
     const char *TAG = "AttitudeControlTask";
@@ -306,7 +312,7 @@ static void attitudeControl(void *pvParameters){
 
         if (statusRobot.statusCode == STATUS_ROBOT_STABILIZED) {
 
-            if (!statusRobot.dirControl.joyAxisX) {     // Yaw control
+            if (!statusRobot.dirControl.angularVel) {     // Yaw control
 
                 if (!isYawControlEnabled) { 
                     attitudeControlStat.setPointYaw = statusRobot.actualYaw;
@@ -325,14 +331,13 @@ static void attitudeControl(void *pvParameters){
             else {
                 isYawControlEnabled = false;
                 pidSetDisable(PID_YAW);
-                // Yaw manual control
-                attitudeControlMotor.motorR = (statusRobot.dirControl.joyAxisX / 100.00) * MAX_ROTATION_RATE_CONTROL;
+                // Yaw manual control: Convierto la velocidad angular rad/s a velocidad de los motores para rotar a esa velocidad
+                float wheelLinearVelocity = (statusRobot.dirControl.angularVel / 100.00) * (WHEEL_BASE/2.00);
+                attitudeControlMotor.motorR = CONVERT_MPS_TO_RPM(wheelLinearVelocity);
                 attitudeControlMotor.motorL = attitudeControlMotor.motorR * -1;
             }
 
-            if (!statusRobot.dirControl.joyAxisY) {     // Pos control
-                statusRobot.actualDistInCms = ((statusRobot.posInMetersL + statusRobot.posInMetersR) / 2) * 100.00;
-
+            if (!statusRobot.dirControl.linearVel) {     // Pos control
                 if (attitudeControlStat.attMode != ATT_MODE_POS_CONTROL) {
                     attitudeControlStat.setPointPosCms = statusRobot.actualDistInCms;           // TODO: podria setearlo cuando llegue a 0 la velocidad de los motores
                     statusRobot.localConfig.pids[PID_POS].setPoint = statusRobot.actualDistInCms;
@@ -342,10 +347,14 @@ static void attitudeControl(void *pvParameters){
                     ESP_LOGI(TAG,"Enable POS_CONTROL");
                 }
          
-                desiredSpeedControl = pidCalculate(PID_POS, statusRobot.actualDistInCms) * (MAX_VELOCITY_SPEED_CONTROL/10.00); 
+                targetLinearRpm = (pidCalculate(PID_POS, statusRobot.actualDistInCms) * MAX_VELOCITY_RPM_CONTROL) / 10.00; 
             }
             else {
-                desiredSpeedControl = (statusRobot.dirControl.joyAxisY * MAX_VELOCITY_SPEED_CONTROL) / 1000.00;
+                float linearVelMps = statusRobot.dirControl.linearVel / 100.00;
+                linearVelMps = fmaxf(-MAX_VELOCITY_MPS_CONTROL, fminf(MAX_VELOCITY_MPS_CONTROL, linearVelMps)); // Limito la velocidad maxima permitida
+
+                // targetLinearVel = CONVERT_MPS_TO_RPM(statusRobot.dirControl.linearVel / 10.00);     // TODO: es linearVel /100(normalizo) * 10 (para que de en m/s *10)
+                targetLinearRpm = CONVERT_MPS_TO_RPM(linearVelMps) / 10.00; 
                 if (attitudeControlStat.attMode != ATT_MODE_MANUAL_CONTROL) {
                     pidSetDisable(PID_POS);
                     statusRobot.localConfig.pids[PID_POS].setPoint = 0.00;
@@ -354,8 +363,8 @@ static void attitudeControl(void *pvParameters){
                 }
             }
 
-            statusRobot.localConfig.pids[PID_SPEED].setPoint = desiredSpeedControl;
-            pidSetSetPoint(PID_SPEED, desiredSpeedControl);
+            statusRobot.localConfig.pids[PID_SPEED].setPoint = targetLinearRpm;
+            pidSetSetPoint(PID_SPEED, targetLinearRpm);
         }
         else {
             if (isYawControlEnabled) {
@@ -368,11 +377,11 @@ static void attitudeControl(void *pvParameters){
 }
 
 static void commsManager(void *pvParameters) {
-    uint8_t contMcbTimeout = 0;
+    uint8_t contMcbTimeout = 0, socketClientsConnected = 0, lastSocketClientsConnected = 0;
+    bool networkState = false, lastNetworkState = false;
     pid_settings_comms_t    newPidSettings;
     command_app_raw_t       newCommand;
-    control_app_raw_t       newControl;
-    bool connectionState = false,lastStateIsConnected = false;
+    velocity_command_t       newControl;
 
     #ifdef HARDWARE_HOVERROBOT
         rx_motor_control_board_t receiveMcb;
@@ -382,10 +391,9 @@ static void commsManager(void *pvParameters) {
     const char *TAG = "commsManager";
 
     while(true) {
-
         if (xQueueReceive(receiveControlQueueHandler,&newControl,0)) {
-            statusRobot.dirControl.joyAxisX = newControl.axisX;
-            statusRobot.dirControl.joyAxisY = newControl.axisY;
+            statusRobot.dirControl.linearVel = newControl.linear_vel;
+            statusRobot.dirControl.angularVel = newControl.angular_vel;
         }
         
         if (xQueueReceive(newPidParamsQueueHandler,&newPidSettings,0)) {
@@ -399,8 +407,8 @@ static void commsManager(void *pvParameters) {
             statusRobot.localConfig.pids[newPidSettings.indexPid].kp = newPidSettings.kp;
             statusRobot.localConfig.pids[newPidSettings.indexPid].ki = newPidSettings.ki;
             statusRobot.localConfig.pids[newPidSettings.indexPid].kd = newPidSettings.kd;
-                    
-            printf("\n**\tNuevos parametros %d:\t**\n*\tP: %f\t*\n*\tI: %f\t*\n*\tD: %f\t*\n*\tcenter: %f\t*\n*\tsafety limits: %f\t*\n",newPidSettings.indexPid,newPidSettings.kp,newPidSettings.ki,newPidSettings.kd,newPidSettings.centerAngle,newPidSettings.safetyLimits);              
+                 
+            ESP_LOGI(TAG, "\n**\tNuevos parametros %d:\t**\n*\tP: %.2f\t\t\t*\n*\tI: %.2f\t\t\t*\n*\tD: %.2f\t\t\t*\n*\tcenter: %.2f\t\t*\n*\tsafety limits: %.2f\t*\n",newPidSettings.indexPid,newPidSettings.kp,newPidSettings.ki,newPidSettings.kd,newPidSettings.centerAngle,newPidSettings.safetyLimits);              
         }
 
         if (xQueueReceive(newCommandQueueHandler,&newCommand,0)) {
@@ -425,23 +433,16 @@ static void commsManager(void *pvParameters) {
                     sendLocalConfig(statusRobot.localConfig);
                 break;
 
-                case COMMAND_MOVE_FORWARD:
-                    ESP_LOGI(TAG,"Move forward command, distance: %f",newCommand.value / PRECISION_DECIMALS_COMMS);
+                case COMMAND_MOVE_DISTANCE:
+                    ESP_LOGI(TAG,"Move distance command, distance: %f",newCommand.value / PRECISION_DECIMALS_COMMS);
                     attitudeControlStat.setPointPosCms += newCommand.value;
-                    statusRobot.localConfig.pids[PID_POS].setPoint = attitudeControlStat.setPointPosCms;
-                    pidSetSetPoint(PID_POS,attitudeControlStat.setPointPosCms);
-                break;
-
-                case COMMAND_MOVE_BACKWARD:
-                    ESP_LOGI(TAG,"Move backward command, distance: %f",newCommand.value / PRECISION_DECIMALS_COMMS);
-                    attitudeControlStat.setPointPosCms -= newCommand.value;
                     statusRobot.localConfig.pids[PID_POS].setPoint = attitudeControlStat.setPointPosCms;
                     pidSetSetPoint(PID_POS,attitudeControlStat.setPointPosCms);
                 break;
 
                 case COMMAND_MOVE_ABS_YAW:
                     float yawAngle = (uint16_t)newCommand.value / PRECISION_DECIMALS_COMMS;
-                    ESP_LOGI(TAG,"Move absolute angle: %f, commandValue: %d",yawAngle,newCommand.value);
+                    ESP_LOGI(TAG,"Move absolute angle: %f",yawAngle);
                     attitudeControlStat.setPointYaw = yawAngle;
                     statusRobot.localConfig.pids[PID_YAW].setPoint = attitudeControlStat.setPointYaw;
                     pidSetSetPoint(PID_YAW, attitudeControlStat.setPointYaw / 1.8);
@@ -487,6 +488,12 @@ static void commsManager(void *pvParameters) {
                 statusRobot.currentL = receiveMcb.currentL;
                 statusRobot.posInMetersR = pos2mts(receiveMcb.posR);
                 statusRobot.posInMetersL = pos2mts(receiveMcb.posL * -1);
+
+
+                float actual = (((statusRobot.posInMetersL + statusRobot.posInMetersR) / 2) - attitudeControlStat.offsetDistInCms);
+                statusRobot.actualDistInCms = actual * 100.00;
+                
+                ESP_LOGI("testPos", "pos result: %f, actual: %f, offset: %f", statusRobot.actualDistInCms, actual, attitudeControlStat.offsetDistInCms);
             }
         #elif defined(HARDWARE_PROTOTYPE)
             motors_measurements_t newMeasureMotors = getMeasMotors();
@@ -496,12 +503,20 @@ static void commsManager(void *pvParameters) {
             statusRobot.posInMetersL = pos2mts(newMeasureMotors.absPosL);
         #endif
 
-        xQueuePeek(appConnectionStateQueueHandler,&connectionState,0);       // Leo el ultimo valor emitido, sin sacarlo de la queue
-        if (connectionState) {
-            if (!lastStateIsConnected) {
+        xQueuePeek(networkStateQueueHandler, &networkState, 0);
+        if (networkState != lastNetworkState) {
+            ESP_LOGI(TAG, "Nuevo estado de conexion wifi: %d", networkState);
+            lastNetworkState = networkState;
+        }
+
+        xQueuePeek(socketConnectionStateQueueHandler, &socketClientsConnected,0);       // Leo el ultimo valor emitido, sin sacarlo de la queue
+        if (networkState && socketClientsConnected > 0) {
+            if (socketClientsConnected > lastSocketClientsConnected) {
                 sendLocalConfig(statusRobot.localConfig);
                 ESP_LOGE(TAG,"Envio nuevo local config");
+                
             }
+            lastSocketClientsConnected = socketClientsConnected;
 
             robot_dynamic_data_t newData = {
                 .isCharging = statusRobot.isCharging,
@@ -516,7 +531,9 @@ static void commsManager(void *pvParameters) {
                 .pitch =  statusRobot.actualPitch * PRECISION_DECIMALS_COMMS,
                 .roll = statusRobot.actualRoll * PRECISION_DECIMALS_COMMS,
                 .yaw = statusRobot.actualYaw * PRECISION_DECIMALS_COMMS,
-                .posInMeters = ((statusRobot.posInMetersL + statusRobot.posInMetersR) / 2) * PRECISION_DECIMALS_COMMS,
+
+                
+                .posInMeters = statusRobot.actualDistInCms,
                 .outputYawControl = statusRobot.outputYawControl * PRECISION_DECIMALS_COMMS,
                 .setPointAngle = statusRobot.localConfig.pids[PID_ANGLE].setPoint * PRECISION_DECIMALS_COMMS,
                 .setPointPos = statusRobot.localConfig.pids[PID_POS].setPoint,                                          // No lo multiplico, para mandarlo en mts
@@ -527,7 +544,6 @@ static void commsManager(void *pvParameters) {
             };
             sendDynamicData(newData);
         }
-        lastStateIsConnected = connectionState;
 
         xQueueSend(motorControlQueueHandler,&speedMotors,0);
 
@@ -620,17 +636,18 @@ void app_main() {
     // gpio_set_direction(PIN_OSCILO , GPIO_MODE_OUTPUT);
     // gpio_set_level(PIN_OSCILO, 1);
 
-    receiveControlQueueHandler = xQueueCreate(1, sizeof(control_app_raw_t));
-    newPidParamsQueueHandler = xQueueCreate(1,sizeof(pid_settings_comms_t));
-    newCommandQueueHandler = xQueueCreate(1, sizeof(command_app_raw_t));
-    motorControlQueueHandler = xQueueCreate(1,sizeof(output_motors_t));
-    mpu6050QueueHandler = xQueueCreate(1,sizeof(vector_queue_t));
-    appConnectionStateQueueHandler = xQueueCreate(1,sizeof(bool));
+    receiveControlQueueHandler = xQueueCreate(1, sizeof(velocity_command_t));
+    newPidParamsQueueHandler = xQueueCreate(1, sizeof(pid_settings_comms_t));
+    newCommandQueueHandler = xQueueCreate(1,  sizeof(command_app_raw_t));
+    motorControlQueueHandler = xQueueCreate(1, sizeof(output_motors_t));
+    mpu6050QueueHandler = xQueueCreate(1, sizeof(vector_queue_t));
+    socketConnectionStateQueueHandler = xQueueCreate(1, sizeof(uint8_t));
+    networkStateQueueHandler = xQueueCreate(1, sizeof(bool));
     #ifdef HARDWARE_HOVERROBOT
         newMcbQueueHandler = xQueueCreate(1,sizeof(rx_motor_control_board_t));
     #endif
     
-    xTaskCreate(statusLedHandler,"status led handler",2048,appConnectionStateQueueHandler,2,NULL);
+    xTaskCreate(statusLedHandler,"status led handler",2048,socketConnectionStateQueueHandler,2,NULL);
     setStatusRobot(STATUS_ROBOT_INIT);
 
     #ifdef HARDWARE_HOVERROBOT
@@ -727,10 +744,14 @@ void app_main() {
 
     // esp_log_level_set("wifi", ESP_LOG_WARN);
     // esp_log_level_set("wifi_init", ESP_LOG_WARN);
-    initWifi(ESP_WIFI_SSID, ESP_WIFI_PASS, WIFI_MODE_STA, appConnectionStateQueueHandler);
-    // initTcpClientSocket(appConnectionStateQueueHandler);
+    #ifdef NETWORK_WIFI_MODE_AP
+        initWifi(ESP_WIFI_SSID, ESP_WIFI_PASS, WIFI_MODE_AP, networkStateQueueHandler);
+    #else
+        initWifi(ESP_WIFI_SSID, ESP_WIFI_PASS, WIFI_MODE_STA, networkStateQueueHandler);
+    #endif
 
-    initTcpServerSocket(appConnectionStateQueueHandler);
+    // initTcpClientSocket(appConnectionStateQueueHandler);
+    initTcpServerSocket(socketConnectionStateQueueHandler);
 
     setStatusRobot(STATUS_ROBOT_ARMED);
     xTaskCreatePinnedToCore(imuControlHandler,"Imu Control",4096,NULL,IMU_HANDLER_PRIORITY,&imuTaskHandler,IMU_HANDLER_CORE);

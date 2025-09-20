@@ -10,9 +10,8 @@
 #define HARDWARE_MAINBOARD 
 // #define HARDWARE_SPLITBOARD
 
-#if defined(HARDWARE_MAINBOARD) || defined(HARDWARE_SPLITBOARD)
-    #define HARDWARE_HOVERROBOT
-#endif
+#define NETWORK_WIFI_MODE_AP
+// #define NETWORK_WIFI_MODE_STA
 
 #define PERIOD_IMU_MS           100
 #define MPU_HANDLER_PRIORITY    5//configMAX_PRIORITIES - 1
@@ -30,12 +29,21 @@
 #define TIME_CLEAN_WHEELS_MS        3000
 #define SPEED_CLEAN_WHEELS_MS       100
 
-#define MAX_VELOCITY                1000.00
+#define MAX_VELOCITY_RPM            1000.00
 #define MAX_CYCLES_LIMIT_SPEED      10
-#define MAX_VELOCITY_SPEED_CONTROL  300.00//500.00         // Velocidad maxima permitida OJO: NO PUEDE SER > 999 (para prevenir la proteccion de LIMIT_SPEED)
+#define MAX_VELOCITY_MPS_CONTROL    1.5                 // Velocidad maxima para control en m/s
 
 #define MIN_PITCH_ARMED             1.00
 #define MIN_ROLL_ARMED              5.00
+
+#define HOST_SERVER_IP_ESP  "192.168.0.101"
+#define CLIENT_IP_APP       "192.168.0.100"
+#define CLIENT_IP_RASPI     "192.168.0.102"
+#define CLIENT_IP_PC        "192.168.0.103"
+
+#if defined(HARDWARE_MAINBOARD) || defined(HARDWARE_SPLITBOARD)
+    #define HARDWARE_HOVERROBOT
+#endif
 
 #if defined(HARDWARE_PROTOTYPE) && defined(HARDWARE_HOVERROBOT)
 #error Error hardware robot config
@@ -43,20 +51,17 @@
 #error Error hardware robot config
 #endif
 
-#define CLIENT_IP_ESP       "192.168.0.101"
-#define CLIENT_IP_APP       "192.168.0.100"
-#define CLIENT_IP_RASPI     "192.168.0.102"
-#define CLIENT_IP_PC        "192.168.0.103"
-
-// #define ESP_WIFI_SSID           "HoverRobotV2"
-// #define ESP_WIFI_PASS           ""
-
-// AP TENDA
-#define ESP_WIFI_SSID           "HoverRobotHub"
-#define ESP_WIFI_PASS           "12345678"
-
-// STA PROPIO
-// #define HOST_IP_ADDR                "192.168.4.2"
+#if defined(NETWORK_WIFI_MODE_AP) && defined(NETWORK_WIFI_MODE_STA)
+    #error Error network robot config
+#elif defined(NETWORK_WIFI_MODE_AP)
+    #define ESP_WIFI_SSID           "HoverRobotAP"
+    #define ESP_WIFI_PASS           "12345678"
+#else
+    #define WIFI_MODE   WIFI_MODE_AP
+    // AP TENDA
+    #define ESP_WIFI_SSID           "HoverRobotHub"
+    #define ESP_WIFI_PASS           "12345678"
+#endif
 
 #if defined(HARDWARE_PROTOTYPE)
 
@@ -97,7 +102,12 @@
     #define STEPS_PER_REV       90.00                   // 90 steps por vuelta
     #define DIST_PER_REV        0.5310707511            // diam 17cm * pi = 53.10707 cms = 0.5310707511 mts
 
+    #define WHEEL_BASE          0.32    // distancia entre ruedas en metros
+
     #define CONVERT_RPM_TO_MPS(rpm) (rpm * DIST_PER_REV) / 60.00    
+    #define CONVERT_MPS_TO_RPM(mps) (mps * 60.00) / DIST_PER_REV
+
+    #define MAX_VELOCITY_RPM_CONTROL    CONVERT_MPS_TO_RPM(1.5)    // Velocidad maxima para control en RPM
 
     #define INVERT_HALL_SIDE        // Invierte el sensor R con el L(depende de la ubicacion fisica de la MCB)
 
@@ -198,9 +208,9 @@ typedef struct {
 } pid_floats_t;
 
 typedef struct {
-    int16_t joyAxisX;
-    int16_t joyAxisY;
-} direction_control_t;
+    int16_t angularVel;             // en rad/s *100 ie: 200 = 2,00 rad/s
+    int16_t linearVel;              // en m/s *100 ie: 125 = 1,25 m/s
+} velocity_control_t;
 
 /**
  * @brief Estructura de datos enviada a la app, contiene settings locales
@@ -219,9 +229,9 @@ typedef struct {
     uint8_t                 isMcbConnected;
     uint16_t                batVoltage;
     uint16_t                batPercent;
-    uint16_t                tempImu;
-    uint16_t                tempMcb;
-    uint16_t                tempMainboard;
+    float                   tempImu;
+    float                   tempMcb;
+    float                   tempMainboard;
     int16_t                 speedR;
     int16_t                 speedL;
     float                   actualPitch;
@@ -235,7 +245,7 @@ typedef struct {
     int16_t                 currentL;
     float                   actualDistInCms;
     float                   outputYawControl;
-    direction_control_t     dirControl;
+    velocity_control_t      dirControl;
     robot_local_configs_t   localConfig;
     uint16_t                statusCode;
 } status_robot_t;
