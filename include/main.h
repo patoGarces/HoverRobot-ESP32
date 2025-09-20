@@ -149,6 +149,13 @@
     #define GPIO_MPU_SDA        26//18
     #define GPIO_MPU_SCL        25//17
 
+    #define GPIO_ULTRASONIC_TRIG        22
+    #define GPIO_ULTRASONIC_FRONT_L     34
+
+    #define GPIO_ULTRASONIC_FRONT_R     39
+    #define GPIO_ULTRASONIC_REAR_L      36
+    #define GPIO_ULTRASONIC_REAR_R      23
+
     #define GPIO_LED_RGB_STATUS 13
     #define CANT_LED_STATUS     8
 

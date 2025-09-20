@@ -15,6 +15,7 @@
 #include "storage_flash.h"
 #include "mpu6050_wrapper.h"
 #include "wifi_handler.h"
+#include "ultrasonic.h"
 
 #ifdef HARDWARE_PROTOTYPE
     #include "stepper.h"
@@ -35,6 +36,7 @@ QueueHandle_t receiveControlQueueHandler;
 QueueHandle_t newMcbQueueHandler;
 QueueHandle_t socketConnectionStateQueueHandler;
 QueueHandle_t networkStateQueueHandler;
+QueueHandle_t distanceMeasureQueue;
 
 TaskHandle_t imuTaskHandler;
 
@@ -227,6 +229,8 @@ static void imuControlHandler(void *pvParameters) {
 
     ESP_LOGI(TAG,"Init imuControlTask");
 
+    uint8_t toggle = false;
+
     while(1) {
         if(xQueueReceive(mpu6050QueueHandler,&newAngles,pdMS_TO_TICKS(10))) {
 
@@ -298,6 +302,9 @@ static void imuControlHandler(void *pvParameters) {
             
             statusRobot.speedL = speedMotors.motorL;
             statusRobot.speedR = speedMotors.motorR;
+
+            // gpio_set_level(PIN_OSCILO, toggle);
+            // toggle = !toggle;
         }
 
         xQueueSend(motorControlQueueHandler,&speedMotors,0);
@@ -312,6 +319,8 @@ static void attitudeControl(void *pvParameters){
     #endif
 
     const char *TAG = "AttitudeControlTask";
+
+    uint8_t toggle = false;
 
     while(true) {
 
@@ -435,6 +444,12 @@ static void commsManager(void *pvParameters) {
     const char *TAG = "commsManager";
 
     while(true) {
+
+        float distanceSensors[4];
+        if (xQueueReceive(distanceMeasureQueue, distanceSensors, 0)) {
+            ESP_LOGI(TAG, " distance: FR> %.02f cm\tFL> %.02f cm\tRR> %.02f cm\tRL> %.02f cm\t", distanceSensors[ULTRASONIC_FRONT_RIGHT], distanceSensors[ULTRASONIC_FRONT_LEFT], distanceSensors[ULTRASONIC_REAR_RIGHT], distanceSensors[ULTRASONIC_REAR_LEFT]);  
+        }
+
         if (xQueueReceive(receiveControlQueueHandler,&newControl,0)) {
             statusRobot.dirControl.linearVel = newControl.linear_vel;
             statusRobot.dirControl.angularVel = newControl.angular_vel;
@@ -639,6 +654,8 @@ void app_main() {
     mpu6050QueueHandler = xQueueCreate(1, sizeof(vector_queue_t));
     socketConnectionStateQueueHandler = xQueueCreate(1, sizeof(uint8_t));
     networkStateQueueHandler = xQueueCreate(1, sizeof(bool));
+    distanceMeasureQueue = xQueueCreate(1, sizeof(float)*4);
+
     #ifdef HARDWARE_HOVERROBOT
         newMcbQueueHandler = xQueueCreate(1,sizeof(rx_motor_control_board_t));
     #endif
@@ -748,6 +765,8 @@ void app_main() {
 
     // initTcpClientSocket(appConnectionStateQueueHandler);
     initTcpServerSocket(socketConnectionStateQueueHandler);
+
+    ultrasonicInit();
 
     setStatusRobot(STATUS_ROBOT_ARMED);
     xTaskCreatePinnedToCore(imuControlHandler,"Imu Control",4096,NULL,IMU_HANDLER_PRIORITY,&imuTaskHandler,IMU_HANDLER_CORE);
