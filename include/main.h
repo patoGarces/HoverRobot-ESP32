@@ -13,14 +13,14 @@
 #define NETWORK_WIFI_MODE_AP
 // #define NETWORK_WIFI_MODE_STA
 
-#define PERIOD_IMU_MS           100
-#define MPU_HANDLER_PRIORITY    5//configMAX_PRIORITIES - 1
-#define IMU_HANDLER_PRIORITY    configMAX_PRIORITIES - 2
+#define PERIOD_IMU_MS               100         // TODO: esta mal esta variable
+#define MPU_HANDLER_PRIORITY        configMAX_PRIORITIES - 1
+#define IMU_HANDLER_PRIORITY        configMAX_PRIORITIES - 2
+#define ATTITUDE_HANDLER_PRIORITY   configMAX_PRIORITIES - 3
+#define COMM_HANDLER_PRIORITY       configMAX_PRIORITIES - 4
 
-#define COMMS_HANDLER_CORE      PRO_CPU_NUM     // core 0
-#define IMU_HANDLER_CORE        APP_CPU_NUM     // core 1
-
-#define COMM_HANDLER_PRIORITY   configMAX_PRIORITIES - 4
+#define COMMS_HANDLER_CORE          PRO_CPU_NUM     // core 0
+#define IMU_HANDLER_CORE            APP_CPU_NUM     // core 1
 
 #define PRECISION_DECIMALS_COMMS    100.00              // Precision al convertir la data cruda a float, en este caso 100 = 0.01
 
@@ -94,7 +94,7 @@
 
 #elif defined(HARDWARE_HOVERROBOT)
     // #define PIN_LED         27
-    // #define PIN_OSCILO      3
+    // #define PIN_OSCILO      32
 
     #define MAX_ANGLE_CONTROL           15.0
     #define MAX_ROTATION_RATE_CONTROL   40.0

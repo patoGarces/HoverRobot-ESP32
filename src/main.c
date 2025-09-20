@@ -299,16 +299,58 @@ static void imuControlHandler(void *pvParameters) {
             statusRobot.speedL = speedMotors.motorL;
             statusRobot.speedR = speedMotors.motorR;
         }
+
+        xQueueSend(motorControlQueueHandler,&speedMotors,0);
     }
 }
 
 static void attitudeControl(void *pvParameters){
     float targetLinearRpm = 0.00;       // velocidad lineal en RPM * 10
-    uint8_t isYawControlEnabled = false;
+    uint8_t contMcbTimeout = 0, isYawControlEnabled = false;
+    #ifdef HARDWARE_HOVERROBOT
+        rx_motor_control_board_t receiveMcb;
+    #endif
 
     const char *TAG = "AttitudeControlTask";
 
     while(true) {
+
+                #ifdef HARDWARE_HOVERROBOT
+            if(xQueueReceive(newMcbQueueHandler,&receiveMcb,0)) {
+                contMcbTimeout = 0;
+                if (!statusRobot.isMcbConnected) {
+                    statusRobot.isMcbConnected = true;
+                    if (statusRobot.statusCode == STATUS_ROBOT_ERROR_MCB_CONNECTION) {
+                        setStatusRobot(STATUS_ROBOT_ARMED);
+                    }
+                }
+                #ifdef HARDWARE_MAINBOARD
+                    statusRobot.isCharging = receiveMcb.isCharging;
+                    statusRobot.tempMcb = receiveMcb.boardTemp / 10.00;
+                    errorMcbHandler(receiveMcb.statusCode);
+                #endif
+                
+                statusRobot.batVoltage = receiveMcb.batVoltage;
+                statusRobot.speedMeasR = receiveMcb.speedR_meas;
+                statusRobot.speedMeasL = receiveMcb.speedL_meas;
+                statusRobot.currentR = receiveMcb.currentR;
+                statusRobot.currentL = receiveMcb.currentL;
+                statusRobot.posInMetersR = pos2mts(receiveMcb.posR);
+                statusRobot.posInMetersL = pos2mts(receiveMcb.posL * -1);
+
+
+                float actual = (((statusRobot.posInMetersL + statusRobot.posInMetersR) / 2) - attitudeControlStat.offsetDistInCms);
+                statusRobot.actualDistInCms = actual * 100.00;
+                
+                // ESP_LOGI("testPos", "pos result: %f, actual: %f, offset: %f", statusRobot.actualDistInCms, actual, attitudeControlStat.offsetDistInCms);
+            }
+        #elif defined(HARDWARE_PROTOTYPE)
+            motors_measurements_t newMeasureMotors = getMeasMotors();
+            statusRobot.speedMeasR = newMeasureMotors.speedMotR;
+            statusRobot.speedMeasL = newMeasureMotors.speedMotL;
+            statusRobot.posInMetersR = pos2mts(newMeasureMotors.absPosR);
+            statusRobot.posInMetersL = pos2mts(newMeasureMotors.absPosL);
+        #endif
 
         if (statusRobot.statusCode == STATUS_ROBOT_STABILIZED) {
 
@@ -372,20 +414,22 @@ static void attitudeControl(void *pvParameters){
             }
         }
 
+        contMcbTimeout++;
+        if(contMcbTimeout > MAX_CONT_TIMEOUT_MCB) {
+            statusRobot.isMcbConnected = false;
+            setStatusRobot(STATUS_ROBOT_ERROR_MCB_CONNECTION);
+        }
+
         vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
 
 static void commsManager(void *pvParameters) {
-    uint8_t contMcbTimeout = 0, socketClientsConnected = 0, lastSocketClientsConnected = 0;
+    uint8_t socketClientsConnected = 0, lastSocketClientsConnected = 0;
     bool networkState = false, lastNetworkState = false;
     pid_settings_comms_t    newPidSettings;
     command_app_raw_t       newCommand;
-    velocity_command_t       newControl;
-
-    #ifdef HARDWARE_HOVERROBOT
-        rx_motor_control_board_t receiveMcb;
-    #endif
+    velocity_command_t      newControl;
 
     uint8_t toggle = false;
     const char *TAG = "commsManager";
@@ -465,43 +509,6 @@ static void commsManager(void *pvParameters) {
                 break;
             }            
         }
-        
-        #ifdef HARDWARE_HOVERROBOT
-            if(xQueueReceive(newMcbQueueHandler,&receiveMcb,0)) {
-                contMcbTimeout = 0;
-                if (!statusRobot.isMcbConnected) {
-                    statusRobot.isMcbConnected = true;
-                    if (statusRobot.statusCode == STATUS_ROBOT_ERROR_MCB_CONNECTION) {
-                        setStatusRobot(STATUS_ROBOT_ARMED);
-                    }
-                }
-                #ifdef HARDWARE_MAINBOARD
-                    statusRobot.isCharging = receiveMcb.isCharging;
-                    statusRobot.tempMcb = receiveMcb.boardTemp / 10.00;
-                    errorMcbHandler(receiveMcb.statusCode);
-                #endif
-                
-                statusRobot.batVoltage = receiveMcb.batVoltage;
-                statusRobot.speedMeasR = receiveMcb.speedR_meas;
-                statusRobot.speedMeasL = receiveMcb.speedL_meas;
-                statusRobot.currentR = receiveMcb.currentR;
-                statusRobot.currentL = receiveMcb.currentL;
-                statusRobot.posInMetersR = pos2mts(receiveMcb.posR);
-                statusRobot.posInMetersL = pos2mts(receiveMcb.posL * -1);
-
-
-                float actual = (((statusRobot.posInMetersL + statusRobot.posInMetersR) / 2) - attitudeControlStat.offsetDistInCms);
-                statusRobot.actualDistInCms = actual * 100.00;
-                
-                ESP_LOGI("testPos", "pos result: %f, actual: %f, offset: %f", statusRobot.actualDistInCms, actual, attitudeControlStat.offsetDistInCms);
-            }
-        #elif defined(HARDWARE_PROTOTYPE)
-            motors_measurements_t newMeasureMotors = getMeasMotors();
-            statusRobot.speedMeasR = newMeasureMotors.speedMotR;
-            statusRobot.speedMeasL = newMeasureMotors.speedMotL;
-            statusRobot.posInMetersR = pos2mts(newMeasureMotors.absPosR);
-            statusRobot.posInMetersL = pos2mts(newMeasureMotors.absPosL);
-        #endif
 
         xQueuePeek(networkStateQueueHandler, &networkState, 0);
         if (networkState != lastNetworkState) {
@@ -543,17 +550,6 @@ static void commsManager(void *pvParameters) {
                 .statusCode = statusRobot.statusCode
             };
             sendDynamicData(newData);
-        }
-
-        xQueueSend(motorControlQueueHandler,&speedMotors,0);
-
-        // gpio_set_level(PIN_OSCILO, toggle);
-        toggle = !toggle;
-
-        contMcbTimeout++;
-        if(contMcbTimeout > MAX_CONT_TIMEOUT_MCB) {
-            statusRobot.isMcbConnected = false;
-            setStatusRobot(STATUS_ROBOT_ERROR_MCB_CONNECTION);
         }
 
         vTaskDelay(pdMS_TO_TICKS(25));
@@ -755,7 +751,7 @@ void app_main() {
 
     setStatusRobot(STATUS_ROBOT_ARMED);
     xTaskCreatePinnedToCore(imuControlHandler,"Imu Control",4096,NULL,IMU_HANDLER_PRIORITY,&imuTaskHandler,IMU_HANDLER_CORE);
-    xTaskCreatePinnedToCore(attitudeControl,"attitude control",4096,NULL,4,NULL,IMU_HANDLER_CORE);
+    xTaskCreatePinnedToCore(attitudeControl,"attitude control",4096,NULL,ATTITUDE_HANDLER_PRIORITY, NULL,IMU_HANDLER_CORE);
     xTaskCreatePinnedToCore(commsManager,"communication manager",4096,NULL,COMM_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);;
 
     // temperature_sensor_config_t temp_sensor_config = {
