@@ -36,7 +36,7 @@ QueueHandle_t receiveControlQueueHandler;
 QueueHandle_t newMcbQueueHandler;
 QueueHandle_t socketConnectionStateQueueHandler;
 QueueHandle_t networkStateQueueHandler;
-QueueHandle_t distanceMeasureQueue;
+QueueHandle_t collisionSensorsQueue;
 
 TaskHandle_t imuTaskHandler;
 
@@ -324,7 +324,7 @@ static void attitudeControl(void *pvParameters){
 
     while(true) {
 
-                #ifdef HARDWARE_HOVERROBOT
+        #ifdef HARDWARE_HOVERROBOT
             if(xQueueReceive(newMcbQueueHandler,&receiveMcb,0)) {
                 contMcbTimeout = 0;
                 if (!statusRobot.isMcbConnected) {
@@ -434,22 +434,14 @@ static void attitudeControl(void *pvParameters){
 }
 
 static void commsManager(void *pvParameters) {
+    const char *TAG = "commsManager";
     uint8_t socketClientsConnected = 0, lastSocketClientsConnected = 0;
     bool networkState = false, lastNetworkState = false;
     pid_settings_comms_t    newPidSettings;
     command_app_raw_t       newCommand;
     velocity_command_t      newControl;
 
-    uint8_t toggle = false;
-    const char *TAG = "commsManager";
-
     while(true) {
-
-        float distanceSensors[4];
-        if (xQueueReceive(distanceMeasureQueue, distanceSensors, 0)) {
-            ESP_LOGI(TAG, " distance: FR> %.02f cm\tFL> %.02f cm\tRR> %.02f cm\tRL> %.02f cm\t", distanceSensors[ULTRASONIC_FRONT_RIGHT], distanceSensors[ULTRASONIC_FRONT_LEFT], distanceSensors[ULTRASONIC_REAR_RIGHT], distanceSensors[ULTRASONIC_REAR_LEFT]);  
-        }
-
         if (xQueueReceive(receiveControlQueueHandler,&newControl,0)) {
             statusRobot.dirControl.linearVel = newControl.linear_vel;
             statusRobot.dirControl.angularVel = newControl.angular_vel;
@@ -525,6 +517,10 @@ static void commsManager(void *pvParameters) {
             }            
         }
 
+        if (xQueueReceive(collisionSensorsQueue, statusRobot.collisionSensors, 0)) {
+            // ESP_LOGI(TAG, " distance: FR: %.02f cm\tFL: %.02f cm\tRR: %.02f cm\tRL: %.02f cm", statusRobot.collisionSensors[ULTRASONIC_FRONT_RIGHT], statusRobot.collisionSensors[ULTRASONIC_FRONT_LEFT], statusRobot.collisionSensors[ULTRASONIC_REAR_RIGHT], statusRobot.collisionSensors[ULTRASONIC_REAR_LEFT]);  
+        }
+
         xQueuePeek(networkStateQueueHandler, &networkState, 0);
         if (networkState != lastNetworkState) {
             ESP_LOGI(TAG, "Nuevo estado de conexion wifi: %d", networkState);
@@ -553,8 +549,12 @@ static void commsManager(void *pvParameters) {
                 .pitch =  statusRobot.actualPitch * PRECISION_DECIMALS_COMMS,
                 .roll = statusRobot.actualRoll * PRECISION_DECIMALS_COMMS,
                 .yaw = statusRobot.actualYaw * PRECISION_DECIMALS_COMMS,
-
-                
+                .collisionSensors = { 
+                    statusRobot.collisionSensors[ULTRASONIC_FRONT_LEFT] * PRECISION_DECIMALS_COMMS,
+                    statusRobot.collisionSensors[ULTRASONIC_FRONT_RIGHT] * PRECISION_DECIMALS_COMMS,
+                    statusRobot.collisionSensors[ULTRASONIC_REAR_LEFT] * PRECISION_DECIMALS_COMMS,
+                    statusRobot.collisionSensors[ULTRASONIC_REAR_RIGHT] * PRECISION_DECIMALS_COMMS
+                },
                 .posInMeters = statusRobot.actualDistInCms,
                 .outputYawControl = statusRobot.outputYawControl * PRECISION_DECIMALS_COMMS,
                 .setPointAngle = statusRobot.localConfig.pids[PID_ANGLE].setPoint * PRECISION_DECIMALS_COMMS,
@@ -654,7 +654,7 @@ void app_main() {
     mpu6050QueueHandler = xQueueCreate(1, sizeof(vector_queue_t));
     socketConnectionStateQueueHandler = xQueueCreate(1, sizeof(uint8_t));
     networkStateQueueHandler = xQueueCreate(1, sizeof(bool));
-    distanceMeasureQueue = xQueueCreate(1, sizeof(float)*4);
+    collisionSensorsQueue = xQueueCreate(1, sizeof(float)*4);
 
     #ifdef HARDWARE_HOVERROBOT
         newMcbQueueHandler = xQueueCreate(1,sizeof(rx_motor_control_board_t));
@@ -766,7 +766,16 @@ void app_main() {
     // initTcpClientSocket(appConnectionStateQueueHandler);
     initTcpServerSocket(socketConnectionStateQueueHandler);
 
-    ultrasonicInit();
+
+    ultrasonic_config_t UltrasonicConfig = {
+        .gpioTrig = GPIO_ULTRASONIC_TRIG,
+        .gpioSensor[ULTRASONIC_FRONT_LEFT] = GPIO_ULTRASONIC_FRONT_L,
+        .gpioSensor[ULTRASONIC_FRONT_RIGHT] = GPIO_ULTRASONIC_FRONT_R,
+        .gpioSensor[ULTRASONIC_REAR_LEFT] = GPIO_ULTRASONIC_REAR_L,
+        .gpioSensor[ULTRASONIC_REAR_RIGHT] = GPIO_ULTRASONIC_REAR_R,
+        .updateQueue = collisionSensorsQueue,
+    };
+    ultrasonicInit(&UltrasonicConfig);
 
     setStatusRobot(STATUS_ROBOT_ARMED);
     xTaskCreatePinnedToCore(imuControlHandler,"Imu Control",4096,NULL,IMU_HANDLER_PRIORITY,&imuTaskHandler,IMU_HANDLER_CORE);

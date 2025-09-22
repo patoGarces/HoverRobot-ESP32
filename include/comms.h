@@ -86,6 +86,7 @@ typedef struct {
     int16_t  pitch;
     int16_t  roll;
     int16_t  yaw;
+    int16_t  collisionSensors[4];
     int16_t  posInMeters;
     int16_t  outputYawControl;
     int16_t  setPointAngle;

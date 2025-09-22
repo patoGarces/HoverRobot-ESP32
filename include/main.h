@@ -151,7 +151,6 @@
 
     #define GPIO_ULTRASONIC_TRIG        22
     #define GPIO_ULTRASONIC_FRONT_L     34
-
     #define GPIO_ULTRASONIC_FRONT_R     39
     #define GPIO_ULTRASONIC_REAR_L      36
     #define GPIO_ULTRASONIC_REAR_R      23
@@ -245,6 +244,7 @@ typedef struct {
     float                   actualRoll;
     float                   actualYaw;
     int16_t                 speedMeasR;
+    float                   collisionSensors[4];
     int16_t                 speedMeasL;
     float                   posInMetersR;
     float                   posInMetersL;
