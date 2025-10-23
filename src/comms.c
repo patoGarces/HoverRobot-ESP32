@@ -53,10 +53,9 @@ static void communicationHandler(void * param) {
  
                         pidSettingsComms.indexPid = newPidSettingsRaw.indexPid;            // TODO: actualizar nuevos pid_floats_t
                         pidSettingsComms.safetyLimits = newPidSettingsRaw.safetyLimits / PRECISION_DECIMALS_COMMS;
-                        pidSettingsComms.centerAngle = newPidSettingsRaw.centerAngle / PRECISION_DECIMALS_COMMS;
-                        pidSettingsComms.kp = newPidSettingsRaw.kp / PRECISION_DECIMALS_COMMS;
-                        pidSettingsComms.ki = newPidSettingsRaw.ki / PRECISION_DECIMALS_COMMS;
-                        pidSettingsComms.kd = newPidSettingsRaw.kd / PRECISION_DECIMALS_COMMS;
+                        pidSettingsComms.kp = newPidSettingsRaw.kp / (PRECISION_DECIMALS_COMMS * 10);
+                        pidSettingsComms.ki = newPidSettingsRaw.ki / (PRECISION_DECIMALS_COMMS * 10);
+                        pidSettingsComms.kd = newPidSettingsRaw.kd / (PRECISION_DECIMALS_COMMS * 10);
                         xQueueSend(newPidParamsQueueHandler,(void*)&pidSettingsComms,0);
                     }
                 break;
@@ -109,14 +108,13 @@ void sendLocalConfig(robot_local_configs_t localConfig) {
     robot_local_configs_comms_t localConfigRaw;
 
     localConfigRaw.headerPackage = HEADER_PACKAGE_LOCAL_CONFIG;
-    localConfigRaw.centerAngle = localConfig.centerAngle * PRECISION_DECIMALS_COMMS;
     localConfigRaw.safetyLimits = localConfig.safetyLimits * PRECISION_DECIMALS_COMMS;
 
     for(uint8_t i=0;i<CANT_PIDS;i++) {
         localConfigRaw.pid[i] = convertPidFloatsToRaw(localConfig.pids[i]);
     }
 
-    ESP_LOGI("SendLocalConfig","center: %d, safety: %d",localConfigRaw.centerAngle,localConfigRaw.safetyLimits);
+    ESP_LOGI("SendLocalConfig","Safety limit: %d",localConfigRaw.safetyLimits);
 
     if (xStreamBufferSend(xStreamBufferSender, &localConfigRaw, sizeof(localConfigRaw), 1) != sizeof(localConfigRaw)) {
         /* TODO: Manejar el caso en el que el buffer está lleno y no se pueden enviar datos */

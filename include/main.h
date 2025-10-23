@@ -10,10 +10,18 @@
 #define HARDWARE_MAINBOARD 
 // #define HARDWARE_SPLITBOARD
 
-#define NETWORK_WIFI_MODE_AP
-// #define NETWORK_WIFI_MODE_STA
+// MCB CONTROL MOTORS MODE:
+// #define MCB_TORQUE_MODE // else SPEED_MODE was applied
 
-#define PERIOD_IMU_MS               100         // TODO: esta mal esta variable
+
+#ifdef MCB_TOQUE_MODE
+    #define PERIOD_PID_PRIMARY_MS       5
+    #define PERIOD_PID_SECONDARY_MS     20
+#else 
+    #define PERIOD_PID_PRIMARY_MS       100
+    #define PERIOD_PID_SECONDARY_MS     40
+#endif
+
 #define MPU_HANDLER_PRIORITY        configMAX_PRIORITIES - 1
 #define IMU_HANDLER_PRIORITY        configMAX_PRIORITIES - 2
 #define ATTITUDE_HANDLER_PRIORITY   configMAX_PRIORITIES - 3
@@ -51,17 +59,12 @@
 #error Error hardware robot config
 #endif
 
-#if defined(NETWORK_WIFI_MODE_AP) && defined(NETWORK_WIFI_MODE_STA)
-    #error Error network robot config
-#elif defined(NETWORK_WIFI_MODE_AP)
-    #define ESP_WIFI_SSID           "HoverRobotAP"
-    #define ESP_WIFI_PASS           "12345678"
-#else
-    #define WIFI_MODE   WIFI_MODE_AP
-    // AP TENDA
-    #define ESP_WIFI_SSID           "HoverRobotHub"
-    #define ESP_WIFI_PASS           "12345678"
-#endif
+
+#define ESP_WIFI_SSID_AP           "HoverRobotAP"
+#define ESP_WIFI_PASS_AP           "12345678"
+// AP TENDA
+#define ESP_WIFI_SSID_STA           "HoverRobotHubV2"
+#define ESP_WIFI_PASS_STA           "12345678"
 
 #if defined(HARDWARE_PROTOTYPE)
 
@@ -93,10 +96,12 @@
     };
 
 #elif defined(HARDWARE_HOVERROBOT)
-    // #define PIN_LED         27
-    // #define PIN_OSCILO      32
+    // #define PIN_LED          27
+    #define PIN_OSCILO          32
 
-    #define MAX_ANGLE_CONTROL           15.0
+    #define TIMEOUT_MCB_MS      400.0
+
+    #define MAX_ANGLE_CONTROL           10.0
     #define MAX_ROTATION_RATE_CONTROL   40.0
 
     #define STEPS_PER_REV       90.00                   // 90 steps por vuelta
@@ -107,11 +112,9 @@
     #define CONVERT_RPM_TO_MPS(rpm) (rpm * DIST_PER_REV) / 60.00    
     #define CONVERT_MPS_TO_RPM(mps) (mps * 60.00) / DIST_PER_REV
 
-    #define MAX_VELOCITY_RPM_CONTROL    CONVERT_MPS_TO_RPM(1.5)    // Velocidad maxima para control en RPM
+    #define MAX_VELOCITY_RPM_CONTROL    CONVERT_MPS_TO_RPM(1.00)    // Velocidad maxima para control en RPM
 
     #define INVERT_HALL_SIDE        // Invierte el sensor R con el L(depende de la ubicacion fisica de la MCB)
-
-    #define MAX_CONT_TIMEOUT_MCB    15 // cada tick son 25ms
 
     #ifdef HARDWARE_SPLITBOARD
         #define DIRECTION_L_MOTOR  1
@@ -148,6 +151,8 @@
     #define GPIO_MPU_INT        12//9      
     #define GPIO_MPU_SDA        26//18
     #define GPIO_MPU_SCL        25//17
+
+    #define GPIO_INPUT_WIFI_MODE        21
 
     #define GPIO_ULTRASONIC_TRIG        22
     #define GPIO_ULTRASONIC_FRONT_L     34
@@ -222,7 +227,6 @@ typedef struct {
  * @brief Estructura de datos enviada a la app, contiene settings locales
  */
 typedef struct {
-    float centerAngle;
     float safetyLimits;
     pid_floats_t pids[CANT_PIDS];
 } robot_local_configs_t;

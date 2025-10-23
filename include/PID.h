@@ -6,20 +6,16 @@
 #include "esp_err.h"
 #include "main.h"
 
-#define MIN_PERIOD_PID	1.00
-#define MAX_PERIOD_PID	1000.00
-
-// typedef struct {
-// 	float kp;
-//     float ki;
-//     float kd;
-// 	float initSetPoint;
-// 	float sampleTimeInMs;
-// } pid_init_t;
+typedef struct {
+    float kp;
+    float ki;
+    float kd;
+    float setPoint;
+	uint16_t sampleTimeInMs;
+} pid_struct_t;
 
 typedef struct {
-	pid_floats_t pids[CANT_PIDS];
-	float sampleTimeInMs;
+	pid_struct_t pids[CANT_PIDS];
 } pid_init_t;
 
 typedef struct {
@@ -33,13 +29,12 @@ typedef struct {
 	float sampleTimeInSec;
 } pid_control_t;
 
-esp_err_t pidInit(pid_init_t initConfig);
-
+pid_struct_t convertPidFloatToStruct(pid_floats_t pidFloat, float period);
+void pidInit(pid_init_t initConfig);
 void pidSetEnable(uint8_t numPid);
-
 void pidSetDisable(uint8_t numPid);
-
 bool pidGetEnable(uint8_t numPid);
+
 /*
  * Esta funcion debe ser llamada cada un periodo fijo definido en pidControl1.sampleTime
  * @param input entra en rango [-100;100]

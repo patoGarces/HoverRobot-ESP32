@@ -54,7 +54,6 @@ robot_local_configs_raw_t convertLocalConfigToRaw(robot_local_configs_t localCon
     }
 
     robot_local_configs_raw_t pidRaw = {
-        .centerAngle = localConfig.centerAngle * PRECISION_DECIMALS_COMMS,
         .safetyLimits = localConfig.safetyLimits * PRECISION_DECIMALS_COMMS,
     };
     memcpy(pidRaw.pids,pids,sizeof(pids));
@@ -73,7 +72,6 @@ robot_local_configs_t convertLocalConfigToFloat(robot_local_configs_raw_t rawCon
     }
 
     robot_local_configs_t localConfigParams = {
-        .centerAngle = rawConfig.centerAngle * PRECISION_DECIMALS_COMMS,
         .safetyLimits = rawConfig.safetyLimits * PRECISION_DECIMALS_COMMS,
     };
     memcpy(localConfigParams.pids,pids,sizeof(pids));

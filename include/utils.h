@@ -3,7 +3,7 @@
 
 #include "stdio.h"
 #include "main.h"
-
+#include "PID.h"
 
 #define SPEED_FADE_CONNECTED 1
 #define SPEED_FADE_DISCONNECTED 5
@@ -15,7 +15,6 @@ typedef struct {
 } pid_params_raw_t;
 
 typedef struct {
-    int16_t             centerAngle;
     uint16_t            safetyLimits;
     pid_params_raw_t    pids[CANT_PIDS];
 } robot_local_configs_raw_t;

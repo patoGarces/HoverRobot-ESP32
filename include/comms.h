@@ -17,10 +17,11 @@
 enum CommandsToRobot {
     COMMAND_CALIBRATE_IMU,
     COMMAND_SAVE_LOCAL_CONFIG,
+    COMMAND_GET_LOCAL_CONFIG,
     COMMAND_ARMED_ROBOT,
     COMMAND_DEARMED_ROBOT,
     COMMAND_CLEAN_WHEELS,
-    COMMAND_VIBRATION_TEST,
+    COMMAND_PID_ANGLE_TEST,
     COMMAND_MOVE_DISTANCE,
     COMMAND_MOVE_ABS_YAW,
     COMMAND_MOVE_REL_YAW
@@ -35,7 +36,6 @@ enum CommandsToRobot {
     uint16_t kp;
     uint16_t ki;
     uint16_t kd;
-    int16_t  centerAngle;
     uint16_t safetyLimits;
 } pid_settings_app_raw_t;
 
@@ -47,7 +47,6 @@ enum CommandsToRobot {
     float kp;
     float ki;
     float kd;
-    float centerAngle;
     float safetyLimits;
 } pid_settings_comms_t;
 
@@ -93,7 +92,6 @@ typedef struct {
     int16_t  setPointPos;
     int16_t  setPointYaw;
     int16_t  setPointSpeed;
-    uint16_t centerAngle;
     uint16_t statusCode;
 } robot_dynamic_data_t;
 
@@ -102,7 +100,6 @@ typedef struct {
  */
 typedef struct {
     uint16_t headerPackage;
-    int16_t  centerAngle;
     uint16_t safetyLimits;
     pid_params_raw_t pid[CANT_PIDS];
 } robot_local_configs_comms_t;
