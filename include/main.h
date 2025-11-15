@@ -13,6 +13,8 @@
 // MCB CONTROL MOTORS MODE:
 // #define MCB_TORQUE_MODE // else SPEED_MODE was applied
 
+// #define NAV_CONNECTION_SOCKET true
+#define NAV_CONNECTION_SERIAL true
 
 #ifdef MCB_TOQUE_MODE
     #define PERIOD_PID_PRIMARY_MS       5
@@ -48,6 +50,9 @@
 #define CLIENT_IP_APP       "192.168.0.100"
 #define CLIENT_IP_RASPI     "192.168.0.102"
 #define CLIENT_IP_PC        "192.168.0.103"
+
+#define STREAM_BUFFER_SIZE              500
+#define STREAM_BUFFER_LENGTH_TRIGGER    15
 
 #if defined(HARDWARE_MAINBOARD) || defined(HARDWARE_SPLITBOARD)
     #define HARDWARE_HOVERROBOT
@@ -130,12 +135,15 @@
         #define DIRECTION_R_MOTOR  1
 
         // PUERTO 1:
+        #define UART_PORT_CAN   UART_NUM_2
         #define GPIO_CAN_TX     14
         #define GPIO_CAN_RX     27
 
         // PUERTO 2:
-        // #define GPIO_CAN_TX     33
-        // #define GPIO_CAN_RX     32
+        #define UART_PORT_NAV   UART_NUM_1
+        #define GPIO_NAV_TX     32
+        #define GPIO_NAV_RX     35
+        #define UART_NAV_BAUD   115200
 
         // PUERTO CAN REAL:
         // #define GPIO_CAN_TX     34
@@ -145,7 +153,7 @@
         #error Error hardware mainboard selected
     #endif
 
-    #define UART_PORT_CAN   UART_NUM_2
+
 
     // Pinout MPU6050
     #define GPIO_MPU_INT        12//9      

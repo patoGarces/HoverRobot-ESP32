@@ -42,7 +42,7 @@ static void communicationHandler(void * param) {
     command_app_raw_t           newCommand;
     
     while(true) {
-        BaseType_t bytes_received = xStreamBufferReceive(xStreamBufferReceiver, received_data, sizeof(received_data), 0);//25);
+        BaseType_t bytes_received = xStreamBufferReceive(xStreamBufferReceiver, received_data, sizeof(received_data), 0);
 
         if (bytes_received > 1) {
             uint16_t headerPackage = getUint16(0,received_data);

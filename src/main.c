@@ -3,7 +3,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
-#include "freertos/semphr.h"
+#include "freertos/stream_buffer.h"
 #include "string.h"
 #include "stdio.h"
 #include "math.h"
@@ -23,6 +23,7 @@
 
 /* Incluyo componentes */
 #include "tcp_socket_component.h"
+#include "nav_comms.h"
 
 #if defined(HARDWARE_HOVERROBOT)
     #include "CAN_MCB.h"
@@ -34,9 +35,12 @@ QueueHandle_t newPidParamsQueueHandler;                     // Recibo nuevos par
 QueueHandle_t newCommandQueueHandler;
 QueueHandle_t receiveControlQueueHandler;
 QueueHandle_t newMcbQueueHandler;
-QueueHandle_t socketConnectionStateQueueHandler;
+static QueueHandle_t socketConnectionStateQueueHandler;
 QueueHandle_t networkStateQueueHandler;
 QueueHandle_t collisionSensorsQueue;
+
+extern StreamBufferHandle_t xStreamBufferReceiver;
+extern StreamBufferHandle_t xStreamBufferSender;
 
 TaskHandle_t imuTaskHandler;
 
@@ -550,7 +554,7 @@ static void commsManager(void *pvParameters) {
         }
 
         xQueuePeek(socketConnectionStateQueueHandler, &socketClientsConnected,0);       // Leo el ultimo valor emitido, sin sacarlo de la queue
-        if (networkState && socketClientsConnected > 0) {
+        if (socketClientsConnected > 0 && (networkState || NAV_CONNECTION_SERIAL )) {
             if (socketClientsConnected > lastSocketClientsConnected) {
                 sendLocalConfig(statusRobot.localConfig);
                 ESP_LOGE(TAG,"Envio nuevo local config");
@@ -679,6 +683,9 @@ void app_main() {
     #ifdef HARDWARE_HOVERROBOT
         newMcbQueueHandler = xQueueCreate(1,sizeof(rx_motor_control_board_t));
     #endif
+
+    xStreamBufferSender = xStreamBufferCreate(STREAM_BUFFER_SIZE, STREAM_BUFFER_LENGTH_TRIGGER);
+    xStreamBufferReceiver = xStreamBufferCreate(STREAM_BUFFER_SIZE, STREAM_BUFFER_LENGTH_TRIGGER);
     
     xTaskCreate(statusLedHandler,"status led handler",2048,socketConnectionStateQueueHandler,2,NULL);
     setStatusRobot(STATUS_ROBOT_INIT);
@@ -818,8 +825,29 @@ void app_main() {
         initWifi(ESP_WIFI_SSID_STA, ESP_WIFI_PASS_STA, WIFI_MODE_STA, networkStateQueueHandler);
     }
 
-    // initTcpClientSocket(appConnectionStateQueueHandler);
-    initTcpServerSocket(socketConnectionStateQueueHandler);
+    #ifdef NAV_CONNECTION_SOCKET
+        tcp_socket_config_t configSocket = {
+            .connectionQueueHandler = socketConnectionStateQueueHandler,
+            .xStreamBufferSend = xStreamBufferSender,
+            .xStreamBufferRecv = xStreamBufferReceiver
+        };
+        initTcpServerSocket(configSocket);
+        // initTcpClientSocket(configSocket);
+    #else
+        config_init_nav_t configSerialClient = {
+            .numUart = UART_PORT_NAV,
+            .txPin = GPIO_NAV_TX,
+            .rxPin = GPIO_NAV_RX,
+            .baudrate = UART_NAV_BAUD,
+            .xStreamBufferSend = xStreamBufferSender,
+            .xStreamBufferRecv = xStreamBufferReceiver,
+            .connectionQueueHandler = socketConnectionStateQueueHandler,
+            .core = COMMS_HANDLER_CORE,
+        };
+        navComms(&configSerialClient);
+
+        comms_start_up();
+    #endif
 
     // temperature_sensor_config_t temp_sensor_config = {
     //     .range_min = 0,
