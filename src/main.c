@@ -16,6 +16,7 @@
 #include "mpu6050_wrapper.h"
 #include "wifi_handler.h"
 #include "ultrasonic.h"
+#include "udp_logger.h"
 
 #ifdef HARDWARE_PROTOTYPE
     #include "stepper.h"
@@ -132,8 +133,8 @@ void setStatusRobot(uint8_t newStatus) {
             case STATUS_ROBOT_STABILIZED:
                 pidClearTerms(PID_ANGLE);
                 pidClearTerms(PID_SPEED);
-                statusRobot.speedL = 0;
-                statusRobot.speedR = 0;
+                statusRobot.speedTargetL = 0;
+                statusRobot.speedTargetR = 0;
                 speedMotors.motorL = 0;
                 speedMotors.motorR = 0;
 
@@ -226,7 +227,7 @@ static void errorMcbHandler(status_code_mcb_t statusCode) {
 
 static void imuControlHandler(void *pvParameters) {
     vector_queue_t newAngles;
-    float safetyLimitProm[5];
+    float safetyLimitProm[5], imuYaw = 0.00, encYawTheta = 0.00, encYawDeg = 0.00, lastPosR = 0.00, lastPosL = 0.00;
     uint8_t contMcbTimeout = 0, safetyLimitPromIndex = 0;
 
     // TODO: arreglar esto para MCB_SPEED_MODE
@@ -245,8 +246,20 @@ static void imuControlHandler(void *pvParameters) {
 
             statusRobot.actualRoll = newAngles.angles[ANGLE_ROLL];
             statusRobot.actualPitch = newAngles.angles[ANGLE_PITCH];
-            statusRobot.actualYaw = newAngles.angles[ANGLE_YAW];
+            imuYaw = newAngles.angles[ANGLE_YAW];
             statusRobot.tempImu = newAngles.temp;
+
+            encYawTheta += ((statusRobot.posInMetersR - lastPosR) - (statusRobot.posInMetersL-lastPosL)) / WHEEL_BASE;       
+            
+            lastPosL = statusRobot.posInMetersL;
+            lastPosR = statusRobot.posInMetersR;
+
+            // Convierto a grados para fusionar con imuYaw
+            encYawDeg = encYawTheta * (180.0f / M_PI);
+
+            statusRobot.actualYaw = FUSE_ALPHA_YAW * imuYaw + (1.00 - FUSE_ALPHA_YAW) * encYawDeg;
+
+            // ESP_LOGI("calc yaw", "encYawDeg: %f\timuYaw: %f\tresult: %f", encYawDeg, imuYaw, statusRobot.actualYaw);
 
             pidSetSetPoint(PID_ANGLE, statusRobot.localConfig.pids[PID_ANGLE].setPoint);
 
@@ -294,8 +307,8 @@ static void imuControlHandler(void *pvParameters) {
             }
         
             
-            statusRobot.speedL = speedMotors.motorL;
-            statusRobot.speedR = speedMotors.motorR;
+            statusRobot.speedTargetL = speedMotors.motorL;
+            statusRobot.speedTargetR = speedMotors.motorR;
 
             // gpio_set_level(PIN_OSCILO, toggle);
             // toggle = !toggle;
@@ -568,8 +581,10 @@ static void commsManager(void *pvParameters) {
                 .imuTemp = statusRobot.tempImu * PRECISION_DECIMALS_COMMS,
                 .mcbTemp = statusRobot.tempMcb * PRECISION_DECIMALS_COMMS,      // Ya esta multiplicada por 1000 desde la mcb
                 .mainboardTemp = statusRobot.tempMainboard,
-                .speedR = CONVERT_RPM_TO_MPS(statusRobot.speedMeasR) * PRECISION_DECIMALS_COMMS,
-                .speedL = CONVERT_RPM_TO_MPS(statusRobot.speedMeasL) * PRECISION_DECIMALS_COMMS,
+                .speedMeasR = CONVERT_RPM_TO_MPS(statusRobot.speedMeasR) * PRECISION_DECIMALS_COMMS,
+                .speedMeasL = CONVERT_RPM_TO_MPS(statusRobot.speedMeasL) * PRECISION_DECIMALS_COMMS,
+                .posWheelR = statusRobot.posInMetersR * PRECISION_DECIMALS_COMMS,
+                .posWheelL =  statusRobot.posInMetersL * PRECISION_DECIMALS_COMMS,
                 .currentR = statusRobot.currentR,                               // Ya esta multiplicada por 100 desde la MCB
                 .currentL = statusRobot.currentL,                               // Ya esta multiplicada por 100 desde la MCB
                 .pitch =  statusRobot.actualPitch * PRECISION_DECIMALS_COMMS,
@@ -607,18 +622,18 @@ static void taskCleanWheels(void *pvParameters) {
     for(testMotor = 0;testMotor < SPEED_CLEAN_WHEELS_MS;testMotor+=(SPEED_CLEAN_WHEELS_MS/10)) {
 
         if (wheel == 0) {
-            statusRobot.speedL = testMotor;
+            statusRobot.speedTargetL = testMotor;
             speedMotors.motorL = testMotor;
         } else {
-            statusRobot.speedR = testMotor;
+            statusRobot.speedTargetR = testMotor;
             speedMotors.motorR = testMotor;
         }
         vTaskDelay(25);
     }
 
     vTaskDelay(pdMS_TO_TICKS(TIME_CLEAN_WHEELS_MS));
-    statusRobot.speedL = 0;
-    statusRobot.speedR = 0;
+    statusRobot.speedTargetL = 0;
+    statusRobot.speedTargetR = 0;
     speedMotors.motorL = 0;
     speedMotors.motorR = 0;
     speedMotors.enable = false;
@@ -825,7 +840,7 @@ void app_main() {
         initWifi(ESP_WIFI_SSID_STA, ESP_WIFI_PASS_STA, WIFI_MODE_STA, networkStateQueueHandler);
     }
 
-    #ifdef NAV_CONNECTION_SOCKET
+    #if NAV_CONNECTION_SOCKET
         tcp_socket_config_t configSocket = {
             .connectionQueueHandler = socketConnectionStateQueueHandler,
             .xStreamBufferSend = xStreamBufferSender,
@@ -848,6 +863,19 @@ void app_main() {
 
         comms_start_up();
     #endif
+
+    udpLoggerInit(514); // Inicio modulo de logs
+
+    ESP_LOGI("TEST", "Hola desde ESP32 vía UDP syslog!");
+
+    // while (true) {
+    //     ESP_LOGI("TEST", "Hola desde ESP32 vía UDP syslog!");
+    //     ESP_LOGD ("TEST", "esto es debug"); 
+    //     ESP_LOGW ("TEST", "esto es warning");
+    //     ESP_LOGE ("TEST", "esto es error"); 
+    //     vTaskDelay(1000);
+    // }
+
 
     // temperature_sensor_config_t temp_sensor_config = {
     //     .range_min = 0,

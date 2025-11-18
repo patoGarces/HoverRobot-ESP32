@@ -114,6 +114,8 @@
 
     #define WHEEL_BASE          0.32    // distancia entre ruedas en metros
 
+    #define FUSE_ALPHA_YAW      0.9     // Ponderacion Yaw Imu
+
     #define CONVERT_RPM_TO_MPS(rpm) (rpm * DIST_PER_REV) / 60.00    
     #define CONVERT_MPS_TO_RPM(mps) (mps * 60.00) / DIST_PER_REV
 
@@ -250,13 +252,13 @@ typedef struct {
     float                   tempImu;
     float                   tempMcb;
     float                   tempMainboard;
-    int16_t                 speedR;
-    int16_t                 speedL;
     float                   actualPitch;
     float                   actualRoll;
     float                   actualYaw;
-    int16_t                 speedMeasR;
     float                   collisionSensors[4];
+    int16_t                 speedTargetR;
+    int16_t                 speedTargetL;
+    int16_t                 speedMeasR;
     int16_t                 speedMeasL;
     float                   posInMetersR;
     float                   posInMetersL;
