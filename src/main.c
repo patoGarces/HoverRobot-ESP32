@@ -866,17 +866,6 @@ void app_main() {
 
     udpLoggerInit(514); // Inicio modulo de logs
 
-    ESP_LOGI("TEST", "Hola desde ESP32 vía UDP syslog!");
-
-    // while (true) {
-    //     ESP_LOGI("TEST", "Hola desde ESP32 vía UDP syslog!");
-    //     ESP_LOGD ("TEST", "esto es debug"); 
-    //     ESP_LOGW ("TEST", "esto es warning");
-    //     ESP_LOGE ("TEST", "esto es error"); 
-    //     vTaskDelay(1000);
-    // }
-
-
     // temperature_sensor_config_t temp_sensor_config = {
     //     .range_min = 0,
     //     .range_max = 100,
