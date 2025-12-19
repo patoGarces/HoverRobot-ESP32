@@ -683,8 +683,8 @@ void app_main() {
     gpio_set_direction(PIN_OSCILO , GPIO_MODE_OUTPUT);
     gpio_set_level(PIN_OSCILO, 1);
 
-    gpio_set_direction(GPIO_INPUT_WIFI_MODE , GPIO_MODE_INPUT);
-    gpio_set_pull_mode(GPIO_INPUT_WIFI_MODE, GPIO_PULLUP_ONLY);
+    gpio_set_direction(GPIO_INPUT_NAV_COMMS_MODE , GPIO_MODE_INPUT);
+    gpio_set_pull_mode(GPIO_INPUT_NAV_COMMS_MODE, GPIO_PULLUP_ONLY);
 
     receiveControlQueueHandler = xQueueCreate(1, sizeof(velocity_command_t));
     newPidParamsQueueHandler = xQueueCreate(1, sizeof(pid_settings_comms_t));
@@ -832,23 +832,13 @@ void app_main() {
     xTaskCreatePinnedToCore(attitudeControl,"attitude control",4096,NULL,ATTITUDE_HANDLER_PRIORITY, NULL,IMU_HANDLER_CORE);
     xTaskCreatePinnedToCore(commsManager,"communication manager",4096,NULL,COMM_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);;
 
-    if (gpio_get_level(GPIO_INPUT_WIFI_MODE)) {
-        ESP_LOGI(TAG, "Wifi mode AP");
-        initWifi(ESP_WIFI_SSID_AP, ESP_WIFI_PASS_AP, WIFI_MODE_AP, networkStateQueueHandler);
-    } else {
-        ESP_LOGI(TAG, "Wifi mode STA");
-        initWifi(ESP_WIFI_SSID_STA, ESP_WIFI_PASS_STA, WIFI_MODE_STA, networkStateQueueHandler);
-    }
+    // ESP_LOGI(TAG, "Wifi mode AP");
+    // initWifi(ESP_WIFI_SSID_AP, ESP_WIFI_PASS_AP, WIFI_MODE_AP, networkStateQueueHandler);
 
-    #if NAV_CONNECTION_SOCKET
-        tcp_socket_config_t configSocket = {
-            .connectionQueueHandler = socketConnectionStateQueueHandler,
-            .xStreamBufferSend = xStreamBufferSender,
-            .xStreamBufferRecv = xStreamBufferReceiver
-        };
-        initTcpServerSocket(configSocket);
-        // initTcpClientSocket(configSocket);
-    #else
+    ESP_LOGI(TAG, "Wifi mode STA");
+    initWifi(ESP_WIFI_SSID_STA, ESP_WIFI_PASS_STA, WIFI_MODE_STA, networkStateQueueHandler);
+
+    if (gpio_get_level(GPIO_INPUT_NAV_COMMS_MODE)) {   // Conexion de navegacion via puerto serie
         config_init_nav_t configSerialClient = {
             .numUart = UART_PORT_NAV,
             .txPin = GPIO_NAV_TX,
@@ -862,7 +852,15 @@ void app_main() {
         navComms(&configSerialClient);
 
         comms_start_up();
-    #endif
+    } else {                                            // Conexion de navegacion via SOCKET TCP
+        tcp_socket_config_t configSocket = {
+            .connectionQueueHandler = socketConnectionStateQueueHandler,
+            .xStreamBufferSend = xStreamBufferSender,
+            .xStreamBufferRecv = xStreamBufferReceiver
+        };
+        initTcpServerSocket(configSocket);
+        // initTcpClientSocket(configSocket);
+    }
 
     udpLoggerInit(514); // Inicio modulo de logs
 

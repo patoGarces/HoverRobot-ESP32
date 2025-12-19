@@ -155,14 +155,12 @@
         #error Error hardware mainboard selected
     #endif
 
-
-
     // Pinout MPU6050
     #define GPIO_MPU_INT        12//9      
     #define GPIO_MPU_SDA        26//18
     #define GPIO_MPU_SCL        25//17
 
-    #define GPIO_INPUT_WIFI_MODE        21
+    #define GPIO_INPUT_NAV_COMMS_MODE  21
 
     #define GPIO_ULTRASONIC_TRIG        22
     #define GPIO_ULTRASONIC_FRONT_L     34
