@@ -53,12 +53,6 @@
 #define STREAM_BUFFER_SIZE              500
 #define STREAM_BUFFER_LENGTH_TRIGGER    15
 
-// #if defined(HARDWARE_PROTOTYPE) && defined(HARDWARE_HOVERROBOT)
-// #error Error hardware robot config
-// #elif !defined(HARDWARE_PROTOTYPE) && !defined(HARDWARE_HOVERROBOT)
-// #error Error hardware robot config
-// #endif
-
 #define ESP_WIFI_SSID_AP           "HoverRobotAP"
 #define ESP_WIFI_PASS_AP           "12345678"
 // AP TENDA
@@ -66,21 +60,10 @@
 #define ESP_WIFI_PASS_STA           "12345678"
 
 #define FUSE_ALPHA_YAW      0.9     // Ponderacion Yaw Imu
-#define CONVERT_RPM_TO_MPS(rpm) (rpm * DIST_PER_REV) / 60.00    
-#define CONVERT_MPS_TO_RPM(mps) (mps * 60.00) / DIST_PER_REV
 
 #ifdef HARDWARE_PROTOTYPE
     #define MAX_ANGLE_CONTROL           15.0
     #define MAX_ROTATION_RATE_CONTROL   100
-
-    #define STEPS_PER_REV       6400.00                 // 200 steps * 1/32 microsteps = 6400 pulsos por vuelta
-    #define DIST_PER_REV        0.326725635973          // diam 0.104m * pi = 0,326725635973 mts
-
-    #define WHEEL_BASE          0.105                    // distancia entre ruedas en metros
-    #define MAX_VELOCITY_RPM_CONTROL    CONVERT_MPS_TO_RPM(1.00)    // Velocidad maxima para control en RPM
-    
-    #define DIRECTION_L_MOTOR  1
-    #define DIRECTION_R_MOTOR  1
 
     #define PIN_LED             2
     #define PIN_OSCILO          27//26
@@ -110,36 +93,18 @@
         ANGLE_ROLL
     };
 
-#elif defined(HARDWARE_HOVERROBOT) || defined(HARDWARE_SPLITBOARD)
+#elif defined(HARDWARE_MAINBOARD) || defined(HARDWARE_SPLITBOARD)
     // #define PIN_LED          27
     #define PIN_OSCILO          32
-
-    #define TIMEOUT_MCB_MS      400.0
 
     #define MAX_ANGLE_CONTROL           10.0
     #define MAX_ROTATION_RATE_CONTROL   40.0
 
-    #define STEPS_PER_REV       90.00                   // 90 steps por vuelta
-    #define DIST_PER_REV        0.5310707511            // diam 17cm * pi = 53.10707 cms = 0.5310707511 mts
-
-    #define WHEEL_BASE          0.32    // distancia entre ruedas en metros
-
-    #define MAX_VELOCITY_RPM_CONTROL    CONVERT_MPS_TO_RPM(1.00)    // Velocidad maxima para control en RPM
-
-    #define INVERT_HALL_SIDE        // Invierte el sensor R con el L(depende de la ubicacion fisica de la MCB)
-
     #ifdef HARDWARE_SPLITBOARD
-        #define DIRECTION_L_MOTOR  1
-        #define DIRECTION_R_MOTOR  -1
-
         #define GPIO_CAN_TX     27
         #define GPIO_CAN_RX     14
 
-
     #elif defined(HARDWARE_MAINBOARD)
-
-        #define DIRECTION_L_MOTOR  1
-        #define DIRECTION_R_MOTOR  1
 
         // PUERTO 1:
         #define UART_PORT_CAN   UART_NUM_2
@@ -217,12 +182,6 @@ enum {
     STATUS_ROBOT_ERROR_BATTERY,
     STATUS_ROBOT_TEST_MODE
 };
-
-typedef struct {
-    int16_t motorR;
-    int16_t motorL;
-    uint8_t enable;
-} output_motors_t;
 
 typedef struct {
     float kp;

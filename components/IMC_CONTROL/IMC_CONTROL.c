@@ -1,59 +1,35 @@
-#include "stepper.h"
-#include "rom/ets_sys.h"
+#include "IMC_CONTROL.h"
+
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_task_wdt.h"
 #include "driver/ledc.h"
 #include "freertos/queue.h"
-
-#include "../include/main.h"
 #include "esp_log.h"
 // #include "driver/pcnt.h"
 #include "driver/pulse_cnt.h" // TODO: migrar
 
 #include "soc/gpio_sig_map.h"
 
-// NEMA 17 1/32
-// #define FREQ_MIN  500//1500
-// #define FREQ_MAX  30000     // <--- VEL MAX
-
-// // impresora 1/32
-#define FREQ_MIN  500
-#define FREQ_MAX  5000//7000
-
-// // impresora 1/1
-// #define FREQ_MIN  100
-// #define FREQ_MAX  500
-
-#define CPU_STEPPER     1
-
-#define SPEED_MODE_TIMER    LEDC_LOW_SPEED_MODE
-#define TIMER_MOT_L         LEDC_TIMER_0
-#define TIMER_MOT_R         LEDC_TIMER_1
-
-#define CHANNEL_MOT_L       LEDC_CHANNEL_0
-#define CHANNEL_MOT_R       LEDC_CHANNEL_1
 
 pcnt_unit_handle_t pcntUnitL = NULL;
 pcnt_unit_handle_t pcntUnitR = NULL;
 
-extern QueueHandle_t motorControlQueueHandler; 
-static stepper_config_t configInit;
-motors_measurements_t motorsMeasurements;
+static config_imc_init_t configInit;
+imc_data_received_t imcStatus;
 
 static void setVelMotors(int16_t speedL,int16_t speedR);
 static void setEnableMotors(uint8_t enable);
 
-motors_measurements_t getMeasMotors() { 
-    return motorsMeasurements;
-}
-
 static void controlHandler(void *pvParameters) {
 
-    output_motors_t newVel;
+    TickType_t pxLastWake = xTaskGetTickCount();
+
+    imc_motor_control_t newVel;
+
     while(true) {
-        if (xQueueReceive(motorControlQueueHandler,&newVel,pdMS_TO_TICKS(1))) {
+        if (xQueueReceive(configInit.queueSendControl, &newVel, pdMS_TO_TICKS(1))) {
             if (newVel.enable) {
                 setVelMotors(newVel.motorL,newVel.motorR);
             }
@@ -62,26 +38,28 @@ static void controlHandler(void *pvParameters) {
             }
             setEnableMotors(newVel.enable);                         // TODO: esto se va a llamar continuamente
         }
-        vTaskDelay(pdMS_TO_TICKS(10));
+
+        xQueueSend(configInit.queueReceiveData, &imcStatus, 0);
+        vTaskDelayUntil(&pxLastWake, pdMS_TO_TICKS(10));
     }
 }
 
 static bool positionReachLimitsL(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t *edata, void *user_ctx) {
     if (edata->watch_point_value == LOW_LIMIT_PCNT) {
-        motorsMeasurements.absPosL -= 100;
+        imcStatus.absPosL -= 100;
     }
     else if (edata->watch_point_value == HIGH_LIMIT_PCNT) {
-        motorsMeasurements.absPosL += 100;
+        imcStatus.absPosL += 100;
     }
     return false; // TODO: revisar esto
 }
 
 static bool positionReachLimitsR(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t *edata, void *user_ctx) {
     if (edata->watch_point_value == LOW_LIMIT_PCNT) {
-        motorsMeasurements.absPosR -= 100;
+        imcStatus.absPosR -= 100;
     }
     else if (edata->watch_point_value == HIGH_LIMIT_PCNT) {
-        motorsMeasurements.absPosR += 100;
+        imcStatus.absPosR += 100;
     }
     return false; // TODO: revisar esto
 }
@@ -183,41 +161,6 @@ static void initPulseGenerator() {
     setVelMotors(0,0);
 }
 
-void motorsInit(stepper_config_t config) {
-
-    configInit = config;
-    /* seteo pines de salida de steps */
-    gpio_config_t pinesMotor = {
-        .intr_type = GPIO_INTR_DISABLE,
-        .mode = GPIO_MODE_INPUT_OUTPUT,
-        .pin_bit_mask = ( 1 << config.gpio_mot_l_dir),
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .pull_up_en = GPIO_PULLUP_DISABLE
-    };
-    gpio_config(&pinesMotor);
-
-    pinesMotor.pin_bit_mask = (1 << config.gpio_mot_r_dir);
-    gpio_config(&pinesMotor);
-
-    pinesMotor.pin_bit_mask = (1 << config.gpio_mot_l_step);
-    gpio_config(&pinesMotor);
-
-    pinesMotor.pin_bit_mask = (1 << config.gpio_mot_r_step);
-    gpio_config(&pinesMotor);
-
-    /* seteo pines de salida de enable*/
-    pinesMotor.pin_bit_mask = (1 << config.gpio_mot_enable);
-    pinesMotor.mode = GPIO_MODE_OUTPUT;
-    gpio_config(&pinesMotor);
-
-    pinesMotor.pin_bit_mask = (1 << config.gpio_mot_microstepper);
-    gpio_config(&pinesMotor);
-
-    initPulseGenerator();
-    initPositionSensor();
-    xTaskCreate(controlHandler,"motor control handler task",4096,NULL,5,NULL);
-}
-
 static void setEnableMotors(uint8_t enable) {
     gpio_set_level(configInit.gpio_mot_enable,!enable);
     if (enable) {
@@ -273,4 +216,46 @@ void setVelMotors(int16_t speedL,int16_t speedR) {
 
 void setMicroSteps(uint8_t fullStep) {
     gpio_set_level(configInit.gpio_mot_microstepper, fullStep);
+}
+
+void imcInit(config_imc_init_t config) {
+    configInit = config;
+
+    /* seteo pines de salida de steps */
+    gpio_config_t pinesMotor = {
+        .intr_type = GPIO_INTR_DISABLE,
+        .mode = GPIO_MODE_INPUT_OUTPUT,
+        .pin_bit_mask = ( 1 << config.gpio_mot_l_dir),
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .pull_up_en = GPIO_PULLUP_DISABLE
+    };
+    gpio_config(&pinesMotor);
+
+    pinesMotor.pin_bit_mask = (1 << config.gpio_mot_r_dir);
+    gpio_config(&pinesMotor);
+
+    pinesMotor.pin_bit_mask = (1 << config.gpio_mot_l_step);
+    gpio_config(&pinesMotor);
+
+    pinesMotor.pin_bit_mask = (1 << config.gpio_mot_r_step);
+    gpio_config(&pinesMotor);
+
+    /* seteo pines de salida de enable*/
+    pinesMotor.pin_bit_mask = (1 << config.gpio_mot_enable);
+    pinesMotor.mode = GPIO_MODE_OUTPUT;
+    gpio_config(&pinesMotor);
+
+    pinesMotor.pin_bit_mask = (1 << config.gpio_mot_microstepper);
+    gpio_config(&pinesMotor);
+
+    imcStatus = (imc_data_received_t) {
+        .absPosR = 0,
+        .absPosL = 0,
+        .speedMotR = 0,
+        .speedMotL = 0
+    };
+
+    initPulseGenerator();
+    initPositionSensor();
+    xTaskCreate(controlHandler,"motor control handler task",4096,NULL,5,NULL);
 }
