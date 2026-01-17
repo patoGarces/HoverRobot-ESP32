@@ -705,6 +705,8 @@ void app_main() {
     // gpio_set_direction(PIN_LED , GPIO_MODE_OUTPUT);
     // gpio_set_level(PIN_LED, 1);
 
+    statusRobot.localConfig.versionFirmware = VERSION_FIRMWARE;
+
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[PIN_OSCILO], PIN_FUNC_GPIO);
     gpio_set_direction(PIN_OSCILO , GPIO_MODE_OUTPUT);
     gpio_set_level(PIN_OSCILO, 1);
