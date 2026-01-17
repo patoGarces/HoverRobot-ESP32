@@ -1,20 +1,19 @@
 #ifndef __MAIN_H__
 #define __MAIN_H__
 #include "stdint.h"
+#include "stdbool.h"
 
 // PARA DETECTAR EL ESP32S3: CONFIG_IDF_TARGET_ESP32S3
 
-// #define THROTTLE_HOLD_MODE      // DESHABILITA EL MODO STABILIZE
+#define VERSION_FIRMWARE    0x01
 
-// #define HARDWARE_PROTOTYPE
-#define HARDWARE_MAINBOARD 
-// #define HARDWARE_SPLITBOARD
+// #define THROTTLE_HOLD_MODE      // DESHABILITA EL MODO STABILIZE
 
 // MCB CONTROL MOTORS MODE:
 // #define MCB_TORQUE_MODE // else SPEED_MODE was applied
 
 // #define NAV_CONNECTION_SOCKET true
-#define NAV_CONNECTION_SERIAL true
+#define NAV_CONNECTION_SERIAL false
 
 #ifdef MCB_TOQUE_MODE
     #define PERIOD_PID_PRIMARY_MS       5
@@ -54,16 +53,11 @@
 #define STREAM_BUFFER_SIZE              500
 #define STREAM_BUFFER_LENGTH_TRIGGER    15
 
-#if defined(HARDWARE_MAINBOARD) || defined(HARDWARE_SPLITBOARD)
-    #define HARDWARE_HOVERROBOT
-#endif
-
-#if defined(HARDWARE_PROTOTYPE) && defined(HARDWARE_HOVERROBOT)
-#error Error hardware robot config
-#elif !defined(HARDWARE_PROTOTYPE) && !defined(HARDWARE_HOVERROBOT)
-#error Error hardware robot config
-#endif
-
+// #if defined(HARDWARE_PROTOTYPE) && defined(HARDWARE_HOVERROBOT)
+// #error Error hardware robot config
+// #elif !defined(HARDWARE_PROTOTYPE) && !defined(HARDWARE_HOVERROBOT)
+// #error Error hardware robot config
+// #endif
 
 #define ESP_WIFI_SSID_AP           "HoverRobotAP"
 #define ESP_WIFI_PASS_AP           "12345678"
@@ -71,13 +65,22 @@
 #define ESP_WIFI_SSID_STA           "HoverRobotHubV2"
 #define ESP_WIFI_PASS_STA           "12345678"
 
-#if defined(HARDWARE_PROTOTYPE)
+#define FUSE_ALPHA_YAW      0.9     // Ponderacion Yaw Imu
+#define CONVERT_RPM_TO_MPS(rpm) (rpm * DIST_PER_REV) / 60.00    
+#define CONVERT_MPS_TO_RPM(mps) (mps * 60.00) / DIST_PER_REV
 
+#ifdef HARDWARE_PROTOTYPE
     #define MAX_ANGLE_CONTROL           15.0
     #define MAX_ROTATION_RATE_CONTROL   100
 
     #define STEPS_PER_REV       6400.00                 // 200 steps * 1/32 microsteps = 6400 pulsos por vuelta
     #define DIST_PER_REV        0.326725635973          // diam 0.104m * pi = 0,326725635973 mts
+
+    #define WHEEL_BASE          0.105                    // distancia entre ruedas en metros
+    #define MAX_VELOCITY_RPM_CONTROL    CONVERT_MPS_TO_RPM(1.00)    // Velocidad maxima para control en RPM
+    
+    #define DIRECTION_L_MOTOR  1
+    #define DIRECTION_R_MOTOR  1
 
     #define PIN_LED             2
     #define PIN_OSCILO          27//26
@@ -94,13 +97,20 @@
     #define GPIO_MOT_ENABLE     14
     #define GPIO_MOT_MICRO_STEP 12
 
+    // Para compatibilidad, no se usa
+    #define GPIO_ULTRASONIC_TRIG        -1
+    #define GPIO_ULTRASONIC_FRONT_L     -1
+    #define GPIO_ULTRASONIC_FRONT_R     -1
+    #define GPIO_ULTRASONIC_REAR_L      -1
+    #define GPIO_ULTRASONIC_REAR_R      -1
+
     enum {
         ANGLE_YAW,
         ANGLE_PITCH,
         ANGLE_ROLL
     };
 
-#elif defined(HARDWARE_HOVERROBOT)
+#elif defined(HARDWARE_HOVERROBOT) || defined(HARDWARE_SPLITBOARD)
     // #define PIN_LED          27
     #define PIN_OSCILO          32
 
@@ -113,11 +123,6 @@
     #define DIST_PER_REV        0.5310707511            // diam 17cm * pi = 53.10707 cms = 0.5310707511 mts
 
     #define WHEEL_BASE          0.32    // distancia entre ruedas en metros
-
-    #define FUSE_ALPHA_YAW      0.9     // Ponderacion Yaw Imu
-
-    #define CONVERT_RPM_TO_MPS(rpm) (rpm * DIST_PER_REV) / 60.00    
-    #define CONVERT_MPS_TO_RPM(mps) (mps * 60.00) / DIST_PER_REV
 
     #define MAX_VELOCITY_RPM_CONTROL    CONVERT_MPS_TO_RPM(1.00)    // Velocidad maxima para control en RPM
 
@@ -235,6 +240,7 @@ typedef struct {
  * @brief Estructura de datos enviada a la app, contiene settings locales
  */
 typedef struct {
+    uint16_t versionFirmware;
     float safetyLimits;
     pid_floats_t pids[CANT_PIDS];
 } robot_local_configs_t;
@@ -243,6 +249,7 @@ typedef struct {
  * @brief Esta estructura de datos generica del robot
  */
 typedef struct {
+    bool                    networkState;
     uint8_t                 isCharging;
     uint8_t                 isMcbConnected;
     uint16_t                batVoltage;

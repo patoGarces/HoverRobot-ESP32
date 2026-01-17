@@ -15,12 +15,12 @@
 #include "soc/gpio_sig_map.h"
 
 // NEMA 17 1/32
-#define FREQ_MIN  500//1500
-#define FREQ_MAX  30000     // <--- VEL MAX
+// #define FREQ_MIN  500//1500
+// #define FREQ_MAX  30000     // <--- VEL MAX
 
 // // impresora 1/32
-// #define FREQ_MIN  3500
-// #define FREQ_MAX  7000
+#define FREQ_MIN  500
+#define FREQ_MAX  5000//7000
 
 // // impresora 1/1
 // #define FREQ_MIN  100

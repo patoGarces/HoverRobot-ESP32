@@ -102,6 +102,7 @@ typedef struct {
  */
 typedef struct {
     uint16_t headerPackage;
+    uint16_t versionFirmware;
     uint16_t safetyLimits;
     pid_params_raw_t pid[CANT_PIDS];
 } robot_local_configs_comms_t;

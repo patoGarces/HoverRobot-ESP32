@@ -180,11 +180,14 @@ void setStatusRobot(uint8_t newStatus) {
             break;
         }
 
-        updateStatusLed(newStatus);
+        #ifdef HARDWARE_MAINBOARD
+            updateStatusLed(newStatus);
+        #endif
         statusRobot.statusCode = newStatus;
     }
 }
 
+#ifdef HARDWARE_MAINBOARD
 static void errorMcbHandler(status_code_mcb_t statusCode) {
     
     switch (statusCode) {
@@ -207,7 +210,7 @@ static void errorMcbHandler(status_code_mcb_t statusCode) {
         case ERROR_MCB_HALL_L:
             #ifdef INVERT_HALL_SIDE
                 setStatusRobot(STATUS_ROBOT_ERROR_HALL_R);
-            #elif
+            #else
                 setStatusRobot(STATUS_ROBOT_ERROR_HALL_L);
             #endif
         break;
@@ -215,7 +218,7 @@ static void errorMcbHandler(status_code_mcb_t statusCode) {
         case ERROR_MCB_HALL_R:
             #ifdef INVERT_HALL_SIDE
                 setStatusRobot(STATUS_ROBOT_ERROR_HALL_L);
-            #elif
+            #else
                 setStatusRobot(STATUS_ROBOT_ERROR_HALL_R);
             #endif
         break;
@@ -224,20 +227,23 @@ static void errorMcbHandler(status_code_mcb_t statusCode) {
         break;
     }
 }
+#endif
 
 static void imuControlHandler(void *pvParameters) {
     vector_queue_t newAngles;
     float safetyLimitProm[5], imuYaw = 0.00, encYawTheta = 0.00, encYawDeg = 0.00, lastPosR = 0.00, lastPosL = 0.00;
     uint8_t contMcbTimeout = 0, safetyLimitPromIndex = 0;
 
-    // TODO: arreglar esto para MCB_SPEED_MODE
-    #ifdef MCB_TORQUE_MODE
-    const uint8_t maxMcbTicksTimeout = TIMEOUT_MCB_MS / PERIOD_PID_PRIMARY_MS;
+    #ifdef HARDWARE_PROTOTYPE
+        const uint8_t maxMcbTicksTimeout = 80;          // 80 ticks * 5ms = 400ms  
     #else
-    const uint8_t maxMcbTicksTimeout = TIMEOUT_MCB_MS / 5.0;
-    #endif
+        // TODO: arreglar esto para MCB_SPEED_MODE
+        #ifdef MCB_TORQUE_MODE
+        const uint8_t maxMcbTicksTimeout = TIMEOUT_MCB_MS / PERIOD_PID_PRIMARY_MS;
+        #else
+        const uint8_t maxMcbTicksTimeout = TIMEOUT_MCB_MS / 5.0;
+        #endif
     
-    #ifdef HARDWARE_HOVERROBOT
         rx_motor_control_board_t receiveMcb;
     #endif
 
@@ -305,7 +311,6 @@ static void imuControlHandler(void *pvParameters) {
                     #endif
                 }
             }
-        
             
             statusRobot.speedTargetL = speedMotors.motorL;
             statusRobot.speedTargetR = speedMotors.motorR;
@@ -314,7 +319,13 @@ static void imuControlHandler(void *pvParameters) {
             // toggle = !toggle;
         }
 
-        #ifdef HARDWARE_HOVERROBOT
+        #ifdef HARDWARE_PROTOTYPE
+            motors_measurements_t newMeasureMotors = getMeasMotors();
+            statusRobot.speedMeasR = newMeasureMotors.speedMotR;
+            statusRobot.speedMeasL = newMeasureMotors.speedMotL;
+            statusRobot.posInMetersR = pos2mts(newMeasureMotors.absPosR);
+            statusRobot.posInMetersL = pos2mts(newMeasureMotors.absPosL);
+        #else
             if (xQueueReceive(newMcbQueueHandler, &receiveMcb, 0)) {
                 contMcbTimeout = 0;
                 if (!statusRobot.isMcbConnected) {
@@ -357,20 +368,14 @@ static void imuControlHandler(void *pvParameters) {
                 else {
                     attitudeControlStat.contSafetyMaxSpeed = 0;
                 }
-            }
-        #elif defined(HARDWARE_PROTOTYPE)
-            motors_measurements_t newMeasureMotors = getMeasMotors();
-            statusRobot.speedMeasR = newMeasureMotors.speedMotR;
-            statusRobot.speedMeasL = newMeasureMotors.speedMotL;
-            statusRobot.posInMetersR = pos2mts(newMeasureMotors.absPosR);
-            statusRobot.posInMetersL = pos2mts(newMeasureMotors.absPosL);
-        #endif
 
-        contMcbTimeout++;
-        if(contMcbTimeout > maxMcbTicksTimeout) {
-            statusRobot.isMcbConnected = false;
-            setStatusRobot(STATUS_ROBOT_ERROR_MCB_CONNECTION);
-        }
+                contMcbTimeout++;
+                if(contMcbTimeout > maxMcbTicksTimeout) {
+                    statusRobot.isMcbConnected = false;
+                    setStatusRobot(STATUS_ROBOT_ERROR_MCB_CONNECTION);
+                }
+            }
+        #endif
 
         xQueueSend(motorControlQueueHandler,&speedMotors,0);        // Cada 5ms aprox
     }
@@ -683,8 +688,10 @@ void app_main() {
     gpio_set_direction(PIN_OSCILO , GPIO_MODE_OUTPUT);
     gpio_set_level(PIN_OSCILO, 1);
 
-    gpio_set_direction(GPIO_INPUT_NAV_COMMS_MODE , GPIO_MODE_INPUT);
-    gpio_set_pull_mode(GPIO_INPUT_NAV_COMMS_MODE, GPIO_PULLUP_ONLY);
+    #ifdef HARDWARE_MAINBOARD
+        gpio_set_direction(GPIO_INPUT_NAV_COMMS_MODE , GPIO_MODE_INPUT);
+        gpio_set_pull_mode(GPIO_INPUT_NAV_COMMS_MODE, GPIO_PULLUP_ONLY);
+    #endif
 
     receiveControlQueueHandler = xQueueCreate(1, sizeof(velocity_command_t));
     newPidParamsQueueHandler = xQueueCreate(1, sizeof(pid_settings_comms_t));
@@ -695,14 +702,14 @@ void app_main() {
     networkStateQueueHandler = xQueueCreate(1, sizeof(bool));
     collisionSensorsQueue = xQueueCreate(1, sizeof(float)*4);
 
-    #ifdef HARDWARE_HOVERROBOT
-        newMcbQueueHandler = xQueueCreate(1,sizeof(rx_motor_control_board_t));
-    #endif
-
     xStreamBufferSender = xStreamBufferCreate(STREAM_BUFFER_SIZE, STREAM_BUFFER_LENGTH_TRIGGER);
     xStreamBufferReceiver = xStreamBufferCreate(STREAM_BUFFER_SIZE, STREAM_BUFFER_LENGTH_TRIGGER);
     
-    xTaskCreate(statusLedHandler,"status led handler",2048,socketConnectionStateQueueHandler,2,NULL);
+    #ifdef HARDWARE_HOVERROBOT
+        newMcbQueueHandler = xQueueCreate(1,sizeof(rx_motor_control_board_t));
+        xTaskCreate(statusLedHandler,"status led handler",2048,socketConnectionStateQueueHandler,2,NULL);
+    #endif
+    
     setStatusRobot(STATUS_ROBOT_INIT);
 
     #ifdef HARDWARE_HOVERROBOT
@@ -743,9 +750,7 @@ void app_main() {
         #endif
 
         statusRobot.localConfig.safetyLimits = 45;
-    #endif
-
-    #ifdef HARDWARE_PROTOTYPE
+    #elif defined(HARDWARE_PROTOTYPE)
         statusRobot.localConfig.pids[PID_ANGLE].kp = 1.48;
         statusRobot.localConfig.pids[PID_ANGLE].ki = 0.52;
         statusRobot.localConfig.pids[PID_ANGLE].kd = 0.21;
@@ -802,6 +807,16 @@ void app_main() {
             .core = 0
         };
         mcbInit(&configMcb);
+
+        ultrasonic_config_t UltrasonicConfig = {
+            .gpioTrig = GPIO_ULTRASONIC_TRIG,
+            .gpioSensor[ULTRASONIC_FRONT_LEFT] = GPIO_ULTRASONIC_FRONT_L,
+            .gpioSensor[ULTRASONIC_FRONT_RIGHT] = GPIO_ULTRASONIC_FRONT_R,
+            .gpioSensor[ULTRASONIC_REAR_LEFT] = GPIO_ULTRASONIC_REAR_L,
+            .gpioSensor[ULTRASONIC_REAR_RIGHT] = GPIO_ULTRASONIC_REAR_R,
+            .updateQueue = collisionSensorsQueue,
+        };
+        ultrasonicInit(&UltrasonicConfig);
     #endif
 
     #ifdef HARDWARE_PROTOTYPE
@@ -817,20 +832,10 @@ void app_main() {
         setMicroSteps(true);
     #endif
 
-    ultrasonic_config_t UltrasonicConfig = {
-        .gpioTrig = GPIO_ULTRASONIC_TRIG,
-        .gpioSensor[ULTRASONIC_FRONT_LEFT] = GPIO_ULTRASONIC_FRONT_L,
-        .gpioSensor[ULTRASONIC_FRONT_RIGHT] = GPIO_ULTRASONIC_FRONT_R,
-        .gpioSensor[ULTRASONIC_REAR_LEFT] = GPIO_ULTRASONIC_REAR_L,
-        .gpioSensor[ULTRASONIC_REAR_RIGHT] = GPIO_ULTRASONIC_REAR_R,
-        .updateQueue = collisionSensorsQueue,
-    };
-    ultrasonicInit(&UltrasonicConfig);
-
     setStatusRobot(STATUS_ROBOT_ARMED);
     xTaskCreatePinnedToCore(imuControlHandler,"Imu Control",4096,NULL,IMU_HANDLER_PRIORITY,&imuTaskHandler,IMU_HANDLER_CORE);
     xTaskCreatePinnedToCore(attitudeControl,"attitude control",4096,NULL,ATTITUDE_HANDLER_PRIORITY, NULL,IMU_HANDLER_CORE);
-    xTaskCreatePinnedToCore(commsManager,"communication manager",4096,NULL,COMM_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);;
+    xTaskCreatePinnedToCore(commsManager,"communication manager",4096,NULL,COMM_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);
 
     // ESP_LOGI(TAG, "Wifi mode AP");
     // initWifi(ESP_WIFI_SSID_AP, ESP_WIFI_PASS_AP, WIFI_MODE_AP, networkStateQueueHandler);
@@ -838,29 +843,39 @@ void app_main() {
     ESP_LOGI(TAG, "Wifi mode STA");
     initWifi(ESP_WIFI_SSID_STA, ESP_WIFI_PASS_STA, WIFI_MODE_STA, networkStateQueueHandler);
 
-    if (gpio_get_level(GPIO_INPUT_NAV_COMMS_MODE)) {   // Conexion de navegacion via puerto serie
-        config_init_nav_t configSerialClient = {
-            .numUart = UART_PORT_NAV,
-            .txPin = GPIO_NAV_TX,
-            .rxPin = GPIO_NAV_RX,
-            .baudrate = UART_NAV_BAUD,
-            .xStreamBufferSend = xStreamBufferSender,
-            .xStreamBufferRecv = xStreamBufferReceiver,
-            .connectionQueueHandler = socketConnectionStateQueueHandler,
-            .core = COMMS_HANDLER_CORE,
-        };
-        navComms(&configSerialClient);
+    #ifdef HARDWARE_MAINBOARD
+        bool isNavSerialEnabled = gpio_get_level(GPIO_INPUT_NAV_COMMS_MODE);
+        if (isNavSerialEnabled) {   // Conexion de navegacion via puerto serie
+            config_init_nav_t configSerialClient = {
+                .numUart = UART_PORT_NAV,
+                .txPin = GPIO_NAV_TX,
+                .rxPin = GPIO_NAV_RX,
+                .baudrate = UART_NAV_BAUD,
+                .xStreamBufferSend = xStreamBufferSender,
+                .xStreamBufferRecv = xStreamBufferReceiver,
+                .connectionQueueHandler = socketConnectionStateQueueHandler,
+                .core = COMMS_HANDLER_CORE,
+            };
+            navComms(&configSerialClient);
 
-        comms_start_up();
-    } else {                                            // Conexion de navegacion via SOCKET TCP
+            comms_start_up();
+        } else {                                            // Conexion de navegacion via SOCKET TCP
+            tcp_socket_config_t configSocket = {
+                .connectionQueueHandler = socketConnectionStateQueueHandler,
+                .xStreamBufferSend = xStreamBufferSender,
+                .xStreamBufferRecv = xStreamBufferReceiver
+            };
+            initTcpServerSocket(configSocket);
+            // initTcpClientSocket(configSocket);
+        }
+    #else 
         tcp_socket_config_t configSocket = {
             .connectionQueueHandler = socketConnectionStateQueueHandler,
             .xStreamBufferSend = xStreamBufferSender,
             .xStreamBufferRecv = xStreamBufferReceiver
         };
         initTcpServerSocket(configSocket);
-        // initTcpClientSocket(configSocket);
-    }
+    #endif
 
     udpLoggerInit(514); // Inicio modulo de logs
 

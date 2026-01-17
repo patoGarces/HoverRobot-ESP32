@@ -95,7 +95,7 @@ void wifi_init_softap(QueueHandle_t networkStateHandler, const char *ssidRed, co
         .ap = {
             .channel = EXAMPLE_ESP_WIFI_CHANNEL,
             .max_connection = EXAMPLE_MAX_STA_CONN,
-            .authmode = WIFI_AUTH_OPEN,
+            .authmode = WIFI_AUTH_WPA2_PSK,//WIFI_AUTH_OPEN,
             .pmf_cfg = {
                 .required = false,
             },
