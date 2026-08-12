@@ -78,8 +78,8 @@ typedef struct {
     uint16_t imuTemp;
     uint16_t mcbTemp;
     uint16_t mainboardTemp;
-    int16_t  speedMeasR;        // Velocidad rueda derecha en m/s
-    int16_t  speedMeasL;      // Velocidad rueda izquierda en m/s
+    int16_t  speedMeasMsR;        // Velocidad rueda derecha en m/s
+    int16_t  speedMeasMsL;        // Velocidad rueda izquierda en m/s
     int16_t  posWheelR;         // Posicion rueda derecha en metros
     int16_t  posWheelL;         // Posicion rueda izquierda en metros
     int16_t  currentR;

@@ -17,7 +17,7 @@ static QueueHandle_t motorControlBackendQueue;
 static QueueHandle_t dataReceiveBackendQueue;
 
 static float pos2mts(int32_t steps) {
-    return (steps/STEPS_PER_REV) * DIST_PER_REV;
+    return (steps/(float)STEPS_PER_REV) * DIST_PER_REV;
 }
 
 float rpm2mps(int16_t rpm) {
@@ -25,7 +25,7 @@ float rpm2mps(int16_t rpm) {
 }
 
 float mps2rpm(float mps) {
-    return (mps * 60.00) * DIST_PER_REV;
+    return (mps * 60.00) * (float)DIST_PER_REV;
 }
 
 void driveControllerHandlerTask(void *pvParameters) {
@@ -33,6 +33,7 @@ void driveControllerHandlerTask(void *pvParameters) {
     TickType_t lastWakeTime = xTaskGetTickCount();
     drive_controller_data_t driveControllerData;
     drive_controller_motor_control_t newMotorControl;
+    uint8_t cont = 0;
 
     #ifdef HARDWARE_PROTOTYPE
         imc_data_received_t receivedDataFromImc;
@@ -47,14 +48,19 @@ void driveControllerHandlerTask(void *pvParameters) {
                     .isCharging = false,
                     .boardTemp = 0.0f,
                     .batVoltage = 0.0f,
-                    .speedMeasRms = receivedDataFromImc.speedMotR,
-                    .speedMeasLms = receivedDataFromImc.speedMotL,
+                    .speedMeasRpmR = receivedDataFromImc.speedMotRRpm,     // velocidad en RPM
+                    .speedMeasRpmL = receivedDataFromImc.speedMotLRpm,     // velocidad en RPM
                     .currentR = 0.0f,
                     .currentL = 0.0f,
                     .posInMetersR = pos2mts(receivedDataFromImc.absPosR),
                     .posInMetersL = pos2mts(receivedDataFromImc.absPosL),
                     .statusCode = NO_ERROR_MCB
                 };
+
+                // if (cont++ > 10) {
+                //     cont = 0;
+                //     ESP_LOGI("SpeedCalculate", "velR: %f, posR: %f", driveControllerData.speedMeasRpmR, driveControllerData.posInMetersR);
+                // }
 
                 xQueueSend(dataControllerQueue, &driveControllerData, 0);
             }
@@ -65,8 +71,8 @@ void driveControllerHandlerTask(void *pvParameters) {
                     .isCharging = receivedDataFromMcb.isCharging,
                     .boardTemp = receivedDataFromMcb.boardTemp / 10.00,
                     .batVoltage = receivedDataFromMcb.batVoltage ,
-                    .speedMeasRms = receivedDataFromMcb.speedR_meas,
-                    .speedMeasLms = receivedDataFromMcb.speedL_meas,
+                    .speedMeasRpmR = receivedDataFromMcb.speedR_meas,
+                    .speedMeasRpmL = receivedDataFromMcb.speedL_meas,
                     .currentR = receivedDataFromMcb.currentR,
                     .currentL = receivedDataFromMcb.currentL,
                     .posInMetersR = pos2mts(receivedDataFromMcb.posR),
@@ -117,10 +123,10 @@ void driveControllerInit(QueueHandle_t driveMotorControlQueue, QueueHandle_t rec
             .gpio_mot_enable = GPIO_MOT_ENABLE,
             .gpio_mot_microstepper = GPIO_MOT_MICRO_STEP,
             .queueSendControl = motorControlBackendQueue,
-            .queueReceiveData = dataReceiveBackendQueue
+            .queueReceiveData = dataReceiveBackendQueue,
+            .setMicroStep = true
         };
         imcInit(configImc);
-        setMicroSteps(true);
     #else
         dataReceiveBackendQueue = xQueueCreate(1, sizeof(mcb_data_received_t));
         motorControlBackendQueue = xQueueCreate(1, sizeof(mcb_motor_control_t));

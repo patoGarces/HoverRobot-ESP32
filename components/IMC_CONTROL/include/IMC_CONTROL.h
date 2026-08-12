@@ -14,12 +14,14 @@
 // // impresora 1/32
 #define FREQ_MIN  500
 #define FREQ_MAX  5000//7000
+#define STEPS_PER_REV       6400                 // 200 steps * 1/32 microsteps = 6400 pulsos por vuelta
+
 
 // // impresora 1/1
 // #define FREQ_MIN  100
 // #define FREQ_MAX  500
+// #define STEPS_PER_REV       200                 // 200 steps por vuelta
 
-#define CPU_STEPPER     1
 
 #define SPEED_MODE_TIMER    LEDC_LOW_SPEED_MODE
 #define TIMER_MOT_L         LEDC_TIMER_0
@@ -32,6 +34,7 @@
 #define HIGH_LIMIT_PCNT 100 // 0x7FFF
 
 typedef struct {
+    bool    setMicroStep;
     uint8_t gpio_mot_l_step;
     uint8_t gpio_mot_l_dir;
     uint8_t gpio_mot_r_step;
@@ -45,8 +48,8 @@ typedef struct {
 typedef struct {
     int32_t absPosL;
     int32_t absPosR;
-    uint16_t speedMotL;
-    uint16_t speedMotR;
+    int32_t speedMotLRpm;
+    int32_t speedMotRRpm;
 } imc_data_received_t;
 
 typedef struct {
@@ -56,6 +59,5 @@ typedef struct {
 } imc_motor_control_t;
 
 void imcInit(config_imc_init_t config);
-void setMicroSteps(uint8_t fullStep);
 
 #endif

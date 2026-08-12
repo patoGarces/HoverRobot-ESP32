@@ -9,22 +9,28 @@
 #include "esp_log.h"
 // #include "driver/pcnt.h"
 #include "driver/pulse_cnt.h" // TODO: migrar
-
 #include "soc/gpio_sig_map.h"
 
+#define PCNT_LIMIT             10000
+#define PCNT_GLITCH_NS         1000
 
-pcnt_unit_handle_t pcntUnitL = NULL;
-pcnt_unit_handle_t pcntUnitR = NULL;
+pcnt_unit_handle_t pcntUnitL;
+pcnt_unit_handle_t pcntUnitR;
+
+typedef struct {
+    volatile int32_t *absPos;
+} pcnt_ctx_t;
 
 static config_imc_init_t configInit;
-imc_data_received_t imcStatus;
+imc_data_received_t imcReceivedData;
 
 static void setVelMotors(int16_t speedL,int16_t speedR);
 static void setEnableMotors(uint8_t enable);
 
 static void controlHandler(void *pvParameters) {
-
     TickType_t pxLastWake = xTaskGetTickCount();
+    int32_t lastCntL = 0, lastCntR = 0;
+    uint16_t cont = 0;
 
     imc_motor_control_t newVel;
 
@@ -39,89 +45,220 @@ static void controlHandler(void *pvParameters) {
             setEnableMotors(newVel.enable);                         // TODO: esto se va a llamar continuamente
         }
 
-        xQueueSend(configInit.queueReceiveData, &imcStatus, 0);
+        if (cont++ > 10) {
+            int cntR, cntL;
+            pcnt_unit_get_count(pcntUnitR, &cntR);
+            pcnt_unit_get_count(pcntUnitL, &cntL);
+
+            int32_t deltaR = lastCntR - cntR;
+            int32_t deltaL = lastCntL - cntL;
+
+            // posición absoluta
+            imcReceivedData.absPosR += deltaR;
+            imcReceivedData.absPosL += deltaL;
+
+            // velocidad (100 ms * 10 = 1s)
+            imcReceivedData.speedMotRRpm = (deltaR * 600) / STEPS_PER_REV;      // calculo pasos por minuto / pasos por vuelta = RPM
+            imcReceivedData.speedMotLRpm = (deltaL * 600) / STEPS_PER_REV;
+
+            pcnt_unit_clear_count(pcntUnitR);
+            pcnt_unit_clear_count(pcntUnitL);
+
+            lastCntR = 0;
+            lastCntL = 0;
+            cont = 0;
+        }
+
+        xQueueSend(configInit.queueReceiveData, &imcReceivedData, 0);
         vTaskDelayUntil(&pxLastWake, pdMS_TO_TICKS(10));
     }
 }
 
-static bool positionReachLimitsL(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t *edata, void *user_ctx) {
-    if (edata->watch_point_value == LOW_LIMIT_PCNT) {
-        imcStatus.absPosL -= 100;
+
+static bool IRAM_ATTR pcntOverflowCb(pcnt_unit_handle_t unit,
+                                     const pcnt_watch_event_data_t *edata,
+                                     void *user_ctx)
+{
+    pcnt_ctx_t *ctx = (pcnt_ctx_t *)user_ctx;
+
+    if (edata->watch_point_value == PCNT_LIMIT) {
+        *(ctx->absPos) += PCNT_LIMIT;
+    } else {
+        *(ctx->absPos) -= PCNT_LIMIT;
     }
-    else if (edata->watch_point_value == HIGH_LIMIT_PCNT) {
-        imcStatus.absPosL += 100;
-    }
-    return false; // TODO: revisar esto
+
+    return false;   // no yield from ISR
 }
 
-static bool positionReachLimitsR(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t *edata, void *user_ctx) {
-    if (edata->watch_point_value == LOW_LIMIT_PCNT) {
-        imcStatus.absPosR -= 100;
-    }
-    else if (edata->watch_point_value == HIGH_LIMIT_PCNT) {
-        imcStatus.absPosR += 100;
-    }
-    return false; // TODO: revisar esto
-}
+/* ================= INIT ================= */
 
-static void initPositionSensor() {
-    pcnt_unit_config_t unit_config = {
-        .high_limit = HIGH_LIMIT_PCNT,
-        .low_limit = LOW_LIMIT_PCNT,
+void initPositionSensor(void)
+{
+    pcnt_unit_config_t unit_cfg = {
+        .high_limit =  PCNT_LIMIT,
+        .low_limit  = -PCNT_LIMIT,
     };
 
-    ESP_ERROR_CHECK(pcnt_new_unit(&unit_config, &pcntUnitL));
-    ESP_ERROR_CHECK(pcnt_new_unit(&unit_config, &pcntUnitR));
+    ESP_ERROR_CHECK(pcnt_new_unit(&unit_cfg, &pcntUnitL));
+    ESP_ERROR_CHECK(pcnt_new_unit(&unit_cfg, &pcntUnitR));
 
-    pcnt_glitch_filter_config_t filter_config = {
-        .max_glitch_ns = 1000,
+    pcnt_glitch_filter_config_t filter_cfg = {
+        .max_glitch_ns = PCNT_GLITCH_NS,
     };
-    ESP_ERROR_CHECK(pcnt_unit_set_glitch_filter(pcntUnitL, &filter_config));
-    ESP_ERROR_CHECK(pcnt_unit_set_glitch_filter(pcntUnitR, &filter_config));
+    ESP_ERROR_CHECK(pcnt_unit_set_glitch_filter(pcntUnitL, &filter_cfg));
+    ESP_ERROR_CHECK(pcnt_unit_set_glitch_filter(pcntUnitR, &filter_cfg));
 
-    pcnt_chan_config_t configChannelL = {
-        .edge_gpio_num = configInit.gpio_mot_l_step,
+    pcnt_chan_config_t chanL_cfg = {
+        .edge_gpio_num  = configInit.gpio_mot_l_step,
         .level_gpio_num = configInit.gpio_mot_l_dir,
     };
-    pcnt_chan_config_t configChannelR = {
-        .edge_gpio_num = configInit.gpio_mot_r_step,
+    pcnt_chan_config_t chanR_cfg = {
+        .edge_gpio_num  = configInit.gpio_mot_r_step,
         .level_gpio_num = configInit.gpio_mot_r_dir,
     };
-    pcnt_channel_handle_t pcntChannelL = NULL;
-    pcnt_channel_handle_t pcntChannelR = NULL;
-    ESP_ERROR_CHECK(pcnt_new_channel(pcntUnitL, &configChannelL, &pcntChannelL));
-    ESP_ERROR_CHECK(pcnt_new_channel(pcntUnitR, &configChannelR, &pcntChannelR));
 
-    ESP_ERROR_CHECK(pcnt_channel_set_edge_action(pcntChannelL, PCNT_CHANNEL_EDGE_ACTION_DECREASE, PCNT_CHANNEL_EDGE_ACTION_HOLD));
-    ESP_ERROR_CHECK(pcnt_channel_set_level_action(pcntChannelL, PCNT_CHANNEL_LEVEL_ACTION_INVERSE, PCNT_CHANNEL_LEVEL_ACTION_KEEP));
-    ESP_ERROR_CHECK(pcnt_channel_set_edge_action(pcntChannelR, PCNT_CHANNEL_EDGE_ACTION_DECREASE, PCNT_CHANNEL_EDGE_ACTION_HOLD));
-    ESP_ERROR_CHECK(pcnt_channel_set_level_action(pcntChannelR, PCNT_CHANNEL_LEVEL_ACTION_INVERSE, PCNT_CHANNEL_LEVEL_ACTION_KEEP));
+    pcnt_channel_handle_t chanL, chanR;
+    ESP_ERROR_CHECK(pcnt_new_channel(pcntUnitL, &chanL_cfg, &chanL));
+    ESP_ERROR_CHECK(pcnt_new_channel(pcntUnitR, &chanR_cfg, &chanR));
 
-    ESP_ERROR_CHECK(pcnt_unit_add_watch_point(pcntUnitL, unit_config.low_limit));
-    ESP_ERROR_CHECK(pcnt_unit_add_watch_point(pcntUnitL, unit_config.high_limit));
-    ESP_ERROR_CHECK(pcnt_unit_add_watch_point(pcntUnitR, unit_config.low_limit));
-    ESP_ERROR_CHECK(pcnt_unit_add_watch_point(pcntUnitR, unit_config.high_limit));
+    ESP_ERROR_CHECK(pcnt_channel_set_edge_action(
+        chanL,
+        PCNT_CHANNEL_EDGE_ACTION_DECREASE,
+        PCNT_CHANNEL_EDGE_ACTION_HOLD));
 
-    pcnt_event_callbacks_t callbackReach = {
-        .on_reach = positionReachLimitsL,
+    ESP_ERROR_CHECK(pcnt_channel_set_level_action(
+        chanL,
+        PCNT_CHANNEL_LEVEL_ACTION_INVERSE,
+        PCNT_CHANNEL_LEVEL_ACTION_KEEP));
+
+    ESP_ERROR_CHECK(pcnt_channel_set_edge_action(
+        chanR,
+        PCNT_CHANNEL_EDGE_ACTION_DECREASE,
+        PCNT_CHANNEL_EDGE_ACTION_HOLD));
+
+    ESP_ERROR_CHECK(pcnt_channel_set_level_action(
+        chanR,
+        PCNT_CHANNEL_LEVEL_ACTION_INVERSE,
+        PCNT_CHANNEL_LEVEL_ACTION_KEEP));
+
+    ESP_ERROR_CHECK(pcnt_unit_add_watch_point(pcntUnitL,  PCNT_LIMIT));
+    ESP_ERROR_CHECK(pcnt_unit_add_watch_point(pcntUnitL, -PCNT_LIMIT));
+    ESP_ERROR_CHECK(pcnt_unit_add_watch_point(pcntUnitR,  PCNT_LIMIT));
+    ESP_ERROR_CHECK(pcnt_unit_add_watch_point(pcntUnitR, -PCNT_LIMIT));
+
+    static pcnt_ctx_t ctxL = {
+        .absPos = &imcReceivedData.absPosL
     };
-    ESP_ERROR_CHECK(pcnt_unit_register_event_callbacks(pcntUnitL, &callbackReach, NULL));
-    callbackReach.on_reach = positionReachLimitsR;
-    ESP_ERROR_CHECK(pcnt_unit_register_event_callbacks(pcntUnitR, &callbackReach, NULL));
+
+    static pcnt_ctx_t ctxR = {
+        .absPos = &imcReceivedData.absPosR
+    };
+
+    pcnt_event_callbacks_t cb = {
+        .on_reach = pcntOverflowCb,
+    };
+
+    ESP_ERROR_CHECK(pcnt_unit_register_event_callbacks(pcntUnitL, &cb, &ctxL));
+    ESP_ERROR_CHECK(pcnt_unit_register_event_callbacks(pcntUnitR, &cb, &ctxR));
 
     ESP_ERROR_CHECK(pcnt_unit_enable(pcntUnitL));
     ESP_ERROR_CHECK(pcnt_unit_enable(pcntUnitR));
+
     ESP_ERROR_CHECK(pcnt_unit_clear_count(pcntUnitL));
     ESP_ERROR_CHECK(pcnt_unit_clear_count(pcntUnitR));
+
     ESP_ERROR_CHECK(pcnt_unit_start(pcntUnitL));
     ESP_ERROR_CHECK(pcnt_unit_start(pcntUnitR));
 
-    esp_rom_gpio_connect_out_signal(configInit.gpio_mot_l_step, LEDC_LS_SIG_OUT0_IDX, false,false);
-    esp_rom_gpio_connect_out_signal(configInit.gpio_mot_l_dir, SIG_GPIO_OUT_IDX, false,false);
+    esp_rom_gpio_connect_out_signal(
+        configInit.gpio_mot_l_step, LEDC_LS_SIG_OUT0_IDX, false, false);
+    esp_rom_gpio_connect_out_signal(
+        configInit.gpio_mot_l_dir, SIG_GPIO_OUT_IDX, false, false);
 
-    esp_rom_gpio_connect_out_signal(configInit.gpio_mot_r_step, LEDC_LS_SIG_OUT1_IDX, false,false);
-    esp_rom_gpio_connect_out_signal(configInit.gpio_mot_r_dir, SIG_GPIO_OUT_IDX, false,false);
+    esp_rom_gpio_connect_out_signal(
+        configInit.gpio_mot_r_step, LEDC_LS_SIG_OUT1_IDX, false, false);
+    esp_rom_gpio_connect_out_signal(
+        configInit.gpio_mot_r_dir, SIG_GPIO_OUT_IDX, false, false);
 }
+
+// static bool positionReachLimitsL(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t *edata, void *user_ctx) {
+//     if (edata->watch_point_value == LOW_LIMIT_PCNT) {
+//         imcReceivedData.absPosL -= 100;
+//     }
+//     else if (edata->watch_point_value == HIGH_LIMIT_PCNT) {
+//         imcReceivedData.absPosL += 100;
+//     }
+//     return false; // TODO: revisar esto
+// }
+
+// static bool positionReachLimitsR(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t *edata, void *user_ctx) {
+//     if (edata->watch_point_value == LOW_LIMIT_PCNT) {
+//         imcReceivedData.absPosR -= 100;
+//     }
+//     else if (edata->watch_point_value == HIGH_LIMIT_PCNT) {
+//         imcReceivedData.absPosR += 100;
+//     }
+//     return false; // TODO: revisar esto
+// }
+
+// static void initPositionSensor() {
+//     pcnt_unit_config_t unit_config = {
+//         .high_limit = HIGH_LIMIT_PCNT,
+//         .low_limit = LOW_LIMIT_PCNT,
+//     };
+
+//     ESP_ERROR_CHECK(pcnt_new_unit(&unit_config, &pcntUnitL));
+//     ESP_ERROR_CHECK(pcnt_new_unit(&unit_config, &pcntUnitR));
+
+//     pcnt_glitch_filter_config_t filter_config = {
+//         .max_glitch_ns = 1000,
+//     };
+//     ESP_ERROR_CHECK(pcnt_unit_set_glitch_filter(pcntUnitL, &filter_config));
+//     ESP_ERROR_CHECK(pcnt_unit_set_glitch_filter(pcntUnitR, &filter_config));
+
+//     pcnt_chan_config_t configChannelL = {
+//         .edge_gpio_num = configInit.gpio_mot_l_step,
+//         .level_gpio_num = configInit.gpio_mot_l_dir,
+//     };
+//     pcnt_chan_config_t configChannelR = {
+//         .edge_gpio_num = configInit.gpio_mot_r_step,
+//         .level_gpio_num = configInit.gpio_mot_r_dir,
+//     };
+//     pcnt_channel_handle_t pcntChannelL = NULL;
+//     pcnt_channel_handle_t pcntChannelR = NULL;
+//     ESP_ERROR_CHECK(pcnt_new_channel(pcntUnitL, &configChannelL, &pcntChannelL));
+//     ESP_ERROR_CHECK(pcnt_new_channel(pcntUnitR, &configChannelR, &pcntChannelR));
+
+//     ESP_ERROR_CHECK(pcnt_channel_set_edge_action(pcntChannelL, PCNT_CHANNEL_EDGE_ACTION_DECREASE, PCNT_CHANNEL_EDGE_ACTION_HOLD));
+//     ESP_ERROR_CHECK(pcnt_channel_set_level_action(pcntChannelL, PCNT_CHANNEL_LEVEL_ACTION_INVERSE, PCNT_CHANNEL_LEVEL_ACTION_KEEP));
+//     ESP_ERROR_CHECK(pcnt_channel_set_edge_action(pcntChannelR, PCNT_CHANNEL_EDGE_ACTION_DECREASE, PCNT_CHANNEL_EDGE_ACTION_HOLD));
+//     ESP_ERROR_CHECK(pcnt_channel_set_level_action(pcntChannelR, PCNT_CHANNEL_LEVEL_ACTION_INVERSE, PCNT_CHANNEL_LEVEL_ACTION_KEEP));
+
+//     ESP_ERROR_CHECK(pcnt_unit_add_watch_point(pcntUnitL, unit_config.low_limit));
+//     ESP_ERROR_CHECK(pcnt_unit_add_watch_point(pcntUnitL, unit_config.high_limit));
+//     ESP_ERROR_CHECK(pcnt_unit_add_watch_point(pcntUnitR, unit_config.low_limit));
+//     ESP_ERROR_CHECK(pcnt_unit_add_watch_point(pcntUnitR, unit_config.high_limit));
+
+//     pcnt_event_callbacks_t callbackReach = {
+//         .on_reach = positionReachLimitsL,
+//     };
+//     ESP_ERROR_CHECK(pcnt_unit_register_event_callbacks(pcntUnitL, &callbackReach, NULL));
+//     callbackReach.on_reach = positionReachLimitsR;
+//     ESP_ERROR_CHECK(pcnt_unit_register_event_callbacks(pcntUnitR, &callbackReach, NULL));
+
+//     ESP_ERROR_CHECK(pcnt_unit_enable(pcntUnitL));
+//     ESP_ERROR_CHECK(pcnt_unit_enable(pcntUnitR));
+//     ESP_ERROR_CHECK(pcnt_unit_clear_count(pcntUnitL));
+//     ESP_ERROR_CHECK(pcnt_unit_clear_count(pcntUnitR));
+//     ESP_ERROR_CHECK(pcnt_unit_start(pcntUnitL));
+//     ESP_ERROR_CHECK(pcnt_unit_start(pcntUnitR));
+
+//     esp_rom_gpio_connect_out_signal(configInit.gpio_mot_l_step, LEDC_LS_SIG_OUT0_IDX, false,false);
+//     esp_rom_gpio_connect_out_signal(configInit.gpio_mot_l_dir, SIG_GPIO_OUT_IDX, false,false);
+
+//     esp_rom_gpio_connect_out_signal(configInit.gpio_mot_r_step, LEDC_LS_SIG_OUT1_IDX, false,false);
+//     esp_rom_gpio_connect_out_signal(configInit.gpio_mot_r_dir, SIG_GPIO_OUT_IDX, false,false);
+// }
 
 static void initPulseGenerator() {
     ledc_timer_config_t timerConfig = {
@@ -214,10 +351,6 @@ void setVelMotors(int16_t speedL,int16_t speedR) {
     // printf("speedL: %d,speedR: %d, freqTimerL: %ld, freqTimerR: %ld\n",speedL,speedR,timerFreqL,timerFreqR);
 }
 
-void setMicroSteps(uint8_t fullStep) {
-    gpio_set_level(configInit.gpio_mot_microstepper, fullStep);
-}
-
 void imcInit(config_imc_init_t config) {
     configInit = config;
 
@@ -248,11 +381,13 @@ void imcInit(config_imc_init_t config) {
     pinesMotor.pin_bit_mask = (1 << config.gpio_mot_microstepper);
     gpio_config(&pinesMotor);
 
-    imcStatus = (imc_data_received_t) {
+    gpio_set_level(configInit.gpio_mot_microstepper, configInit.setMicroStep);
+
+    imcReceivedData = (imc_data_received_t) {
         .absPosR = 0,
         .absPosL = 0,
-        .speedMotR = 0,
-        .speedMotL = 0
+        .speedMotRRpm = 0,
+        .speedMotLRpm = 0
     };
 
     initPulseGenerator();

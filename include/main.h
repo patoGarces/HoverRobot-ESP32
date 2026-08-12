@@ -222,8 +222,8 @@ typedef struct {
     float                   collisionSensors[4];
     int16_t                 speedTargetR;
     int16_t                 speedTargetL;
-    int16_t                 speedMeasR;
-    int16_t                 speedMeasL;
+    int16_t                 speedMeasRpmR;
+    int16_t                 speedMeasRpmL;
     float                   posInMetersR;
     float                   posInMetersL;
     int16_t                 currentR;

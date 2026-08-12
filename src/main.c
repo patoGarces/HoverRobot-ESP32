@@ -302,8 +302,8 @@ static void imuControlHandler(void *pvParameters) {
 
             // TODO: paso intermedio, proximo paso crear una estructura de tipo drive_controller_data_t dentro de statusRobot
             statusRobot.batVoltage = newMotorDataReceived.batVoltage;
-            statusRobot.speedMeasR = newMotorDataReceived.speedMeasRms;
-            statusRobot.speedMeasL = newMotorDataReceived.speedMeasLms;
+            statusRobot.speedMeasRpmR = newMotorDataReceived.speedMeasRpmR;
+            statusRobot.speedMeasRpmL = newMotorDataReceived.speedMeasRpmL;
             statusRobot.currentR = newMotorDataReceived.currentR;
             statusRobot.currentL = newMotorDataReceived.currentL;
             statusRobot.posInMetersR = newMotorDataReceived.posInMetersR;
@@ -316,11 +316,13 @@ static void imuControlHandler(void *pvParameters) {
             statusRobot.actualDistInCms = actual * 100.00;
 
             uint16_t maxSpeedLimit = 550;
-            #ifndef MCB_TORQUE_MODE
+            #ifdef HARDWARE_PROTOTYPE
+                maxSpeedLimit = 2999;
+            #elifndef MCB_TORQUE_MODE
                 maxSpeedLimit = 999;
             #endif
             
-            if (abs(statusRobot.speedMeasL) > maxSpeedLimit || abs(statusRobot.speedMeasR) > maxSpeedLimit) {
+            if (abs(statusRobot.speedMeasRpmL) > maxSpeedLimit || abs(statusRobot.speedMeasRpmR) > maxSpeedLimit) {
                 attitudeControlStat.contSafetyMaxSpeed++;
                 if (attitudeControlStat.contSafetyMaxSpeed > MAX_CYCLES_LIMIT_SPEED) {
                     setStatusRobot(STATUS_ROBOT_ERROR_LIMIT_SPEED);
@@ -339,64 +341,6 @@ static void imuControlHandler(void *pvParameters) {
             setStatusRobot(STATUS_ROBOT_ERROR_MCB_CONNECTION);
         }
 
-        // #ifdef HARDWARE_PROTOTYPE            // TODO: eliminar todo este bloque
-        //     motors_measurements_t newMeasureMotors = getMeasMotors();
-        //     statusRobot.speedMeasR = newMeasureMotors.speedMotR;
-        //     statusRobot.speedMeasL = newMeasureMotors.speedMotL;
-        //     statusRobot.posInMetersR = pos2mts(newMeasureMotors.absPosR);
-        //     statusRobot.posInMetersL = pos2mts(newMeasureMotors.absPosL);
-        // #else
-        //     if (xQueueReceive(newMcbQueueHandler, &receiveMcb, 0)) {
-        //         contMcbTimeout = 0;
-        //         if (!statusRobot.isMcbConnected) {
-        //             statusRobot.isMcbConnected = true;
-        //             if (statusRobot.statusCode == STATUS_ROBOT_ERROR_MCB_CONNECTION) {
-        //                 setStatusRobot(STATUS_ROBOT_ARMED);
-        //             }
-        //         }
-
-        //         #ifdef HARDWARE_MAINBOARD
-        //             statusRobot.isCharging = receiveMcb.isCharging;
-        //             statusRobot.tempMcb = receiveMcb.boardTemp / 10.00;
-        //             driveControllerStatusHandler(receiveMcb.statusCode);
-        //         #endif
-                
-        //         statusRobot.batVoltage = receiveMcb.batVoltage;
-        //         statusRobot.speedMeasR = receiveMcb.speedR_meas;
-        //         statusRobot.speedMeasL = receiveMcb.speedL_meas;
-        //         statusRobot.currentR = receiveMcb.currentR;
-        //         statusRobot.currentL = receiveMcb.currentL;
-        //         statusRobot.posInMetersR = pos2mts(receiveMcb.posR);
-        //         statusRobot.posInMetersL = pos2mts(receiveMcb.posL * -1);
-
-        //         float actual = (((statusRobot.posInMetersL + statusRobot.posInMetersR) / 2) - attitudeControlStat.offsetDistInCms);
-        //         statusRobot.actualDistInCms = actual * 100.00;
-
-        //         uint16_t maxSpeedLimit = 550;
-        //         #ifndef MCB_TORQUE_MODE
-        //             maxSpeedLimit = 999;
-        //         #endif
-                
-        //         if (abs(statusRobot.speedMeasL) > maxSpeedLimit || abs(statusRobot.speedMeasR) > maxSpeedLimit) {
-        //             attitudeControlStat.contSafetyMaxSpeed++;
-        //             if (attitudeControlStat.contSafetyMaxSpeed > MAX_CYCLES_LIMIT_SPEED ) {
-        //                 setStatusRobot(STATUS_ROBOT_ERROR_LIMIT_SPEED);
-        //                 vTaskDelay(30);
-        //                 setStatusRobot(STATUS_ROBOT_ARMED);
-        //             }
-        //         }
-        //         else {
-        //             attitudeControlStat.contSafetyMaxSpeed = 0;
-        //         }
-
-        //         contMcbTimeout++;
-        //         if(contMcbTimeout > driveControllerTicksTimeout) {
-        //             statusRobot.isMcbConnected = false;
-        //             setStatusRobot(STATUS_ROBOT_ERROR_MCB_CONNECTION);
-        //         }
-        //     }
-        // #endif
-
         xQueueSend(driveControllerMotorQueue, &speedMotors, 0);        // Cada 5ms aprox
     }
 }
@@ -405,7 +349,7 @@ static void attitudeControl(void *pvParameters){
     float targetLinearRpm = 0.00;       // velocidad lineal en RPM * 10
     uint8_t isYawControlEnabled = false;
     const char *TAG = "AttitudeControlTask";
-    uint8_t toggle = false;
+    uint8_t cont = 0;
 
     TickType_t lastWake = xTaskGetTickCount();
 
@@ -448,6 +392,11 @@ static void attitudeControl(void *pvParameters){
                 }
          
                 targetLinearRpm = (pidCalculate(PID_POS, statusRobot.actualDistInCms) * mps2rpm(MAX_VELOCITY_CONTROL_IN_MPS)) / 10.00; 
+
+                if (cont++ > 10) {
+                    cont = 0;
+                    ESP_LOGI("posControl", "targetLinearRpm: %f, actualDist: %f", targetLinearRpm, statusRobot.actualDistInCms);
+                }
             }
             else {
                 float linearVelMps = statusRobot.dirControl.linearVel / 100.00;
@@ -466,7 +415,7 @@ static void attitudeControl(void *pvParameters){
             statusRobot.localConfig.pids[PID_SPEED].setPoint = targetLinearRpm;
             pidSetSetPoint(PID_SPEED, targetLinearRpm);
 
-            int16_t meanSpeedMeas = (statusRobot.speedMeasR - statusRobot.speedMeasL) / 20.00;       // velocidad maxima deberia ser 1000
+            int16_t meanSpeedMeas = (statusRobot.speedMeasRpmR - statusRobot.speedMeasRpmL) / 20.00;       // velocidad maxima deberia ser 1000
             float desiredAngleControl = (float)(pidCalculate(PID_SPEED, meanSpeedMeas) * MAX_ANGLE_CONTROL); 
 
             if (statusRobot.statusCode != STATUS_ROBOT_TEST_MODE) {           // TODO: buscar un mejor mecanismo
@@ -607,10 +556,10 @@ static void commsManager(void *pvParameters) {
                 .imuTemp = statusRobot.tempImu * PRECISION_DECIMALS_COMMS,
                 .mcbTemp = statusRobot.tempMcb * PRECISION_DECIMALS_COMMS,      // Ya esta multiplicada por 1000 desde la mcb
                 .mainboardTemp = statusRobot.tempMainboard,
-                .speedMeasR = rpm2mps(statusRobot.speedMeasR) * PRECISION_DECIMALS_COMMS,
-                .speedMeasL = rpm2mps(statusRobot.speedMeasL) * PRECISION_DECIMALS_COMMS,
+                .speedMeasMsR = rpm2mps(statusRobot.speedMeasRpmR) * PRECISION_DECIMALS_COMMS,
+                .speedMeasMsL = rpm2mps(statusRobot.speedMeasRpmL) * PRECISION_DECIMALS_COMMS,
                 .posWheelR = statusRobot.posInMetersR * PRECISION_DECIMALS_COMMS,
-                .posWheelL =  statusRobot.posInMetersL * PRECISION_DECIMALS_COMMS,
+                .posWheelL = statusRobot.posInMetersL * PRECISION_DECIMALS_COMMS,
                 .currentR = statusRobot.currentR,                               // Ya esta multiplicada por 100 desde la MCB
                 .currentL = statusRobot.currentL,                               // Ya esta multiplicada por 100 desde la MCB
                 .pitch =  statusRobot.actualPitch * PRECISION_DECIMALS_COMMS,
