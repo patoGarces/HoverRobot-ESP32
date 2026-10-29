@@ -21,7 +21,9 @@ static const char *TAG = "COMMS HANDLER";
 
 static void communicationHandler(void * param);
 
-void comms_start_up(void){
+void comms_start_up(void) {
+
+    ESP_LOGE(TAG,"COMMS START UP");
     xTaskCreatePinnedToCore(communicationHandler, "communicationHandler", 4096, NULL, 10, &commsHandle,COMMS_HANDLER_CORE);
 }
 
@@ -108,6 +110,7 @@ void sendLocalConfig(robot_local_configs_t localConfig) {
     robot_local_configs_comms_t localConfigRaw;
 
     localConfigRaw.headerPackage = HEADER_PACKAGE_LOCAL_CONFIG;
+    localConfigRaw.versionFirmware = localConfig.versionFirmware;
     localConfigRaw.safetyLimits = localConfig.safetyLimits * PRECISION_DECIMALS_COMMS;
 
     for(uint8_t i=0;i<CANT_PIDS;i++) {

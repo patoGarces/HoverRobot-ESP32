@@ -17,25 +17,18 @@
 #include "wifi_handler.h"
 #include "ultrasonic.h"
 #include "udp_logger.h"
-
-#ifdef HARDWARE_PROTOTYPE
-    #include "stepper.h"
-#endif
+#include "drive_controller.h"
 
 /* Incluyo componentes */
 #include "tcp_socket_component.h"
 #include "nav_comms.h"
 
-#if defined(HARDWARE_HOVERROBOT)
-    #include "CAN_MCB.h"
-#endif
-
 extern QueueHandle_t mpu6050QueueHandler;                   // Recibo nuevos angulos obtenidos del MPU
-QueueHandle_t motorControlQueueHandler;                     // Envio nuevos valores de salida para el control de motores
+QueueHandle_t driveControllerMotorQueue;                     // Envio nuevos valores de salida para el control de motores
+QueueHandle_t driveControllerDataReceiveQueue;
 QueueHandle_t newPidParamsQueueHandler;                     // Recibo nuevos parametros relacionados al pid
 QueueHandle_t newCommandQueueHandler;
 QueueHandle_t receiveControlQueueHandler;
-QueueHandle_t newMcbQueueHandler;
 static QueueHandle_t socketConnectionStateQueueHandler;
 QueueHandle_t networkStateQueueHandler;
 QueueHandle_t collisionSensorsQueue;
@@ -46,8 +39,8 @@ extern StreamBufferHandle_t xStreamBufferSender;
 TaskHandle_t imuTaskHandler;
 
 static status_robot_t statusRobot;                            // Estructura que contiene todos los parametros de status a enviar a la app
-static output_motors_t speedMotors;
-static output_motors_t attitudeControlMotor;
+static drive_controller_motor_control_t speedMotors;                // TODO: hace falta definir 2? un speedMotors y otro attitudeControlMotors?
+static drive_controller_motor_control_t attitudeControlMotor;
 
 static void taskCleanWheels(void *pvParameters);
 static void PidAngleStepResponseTask(void *pvParameters);
@@ -66,10 +59,6 @@ struct {
     .setPointYaw = 0.00,
     .offsetDistInCms = 0.00
 };
-
-float pos2mts(int32_t steps) {
-    return (steps/STEPS_PER_REV) * DIST_PER_REV;
-}
 
 /*
   * Calculo de distancia angular para el yaw, donde hay una discontinuidad entre -180 y 180, ya que en realidad ese salto no es tal.
@@ -180,12 +169,14 @@ void setStatusRobot(uint8_t newStatus) {
             break;
         }
 
-        updateStatusLed(newStatus);
+        #ifdef HARDWARE_MAINBOARD
+            updateStatusLed(newStatus);
+        #endif
         statusRobot.statusCode = newStatus;
     }
 }
 
-static void errorMcbHandler(status_code_mcb_t statusCode) {
+static void driveControllerStatusHandler(drive_controller_status_code_t statusCode) {
     
     switch (statusCode) {
         case NO_ERROR_MCB:
@@ -207,7 +198,7 @@ static void errorMcbHandler(status_code_mcb_t statusCode) {
         case ERROR_MCB_HALL_L:
             #ifdef INVERT_HALL_SIDE
                 setStatusRobot(STATUS_ROBOT_ERROR_HALL_R);
-            #elif
+            #else
                 setStatusRobot(STATUS_ROBOT_ERROR_HALL_L);
             #endif
         break;
@@ -215,7 +206,7 @@ static void errorMcbHandler(status_code_mcb_t statusCode) {
         case ERROR_MCB_HALL_R:
             #ifdef INVERT_HALL_SIDE
                 setStatusRobot(STATUS_ROBOT_ERROR_HALL_L);
-            #elif
+            #else
                 setStatusRobot(STATUS_ROBOT_ERROR_HALL_R);
             #endif
         break;
@@ -229,17 +220,8 @@ static void imuControlHandler(void *pvParameters) {
     vector_queue_t newAngles;
     float safetyLimitProm[5], imuYaw = 0.00, encYawTheta = 0.00, encYawDeg = 0.00, lastPosR = 0.00, lastPosL = 0.00;
     uint8_t contMcbTimeout = 0, safetyLimitPromIndex = 0;
-
-    // TODO: arreglar esto para MCB_SPEED_MODE
-    #ifdef MCB_TORQUE_MODE
-    const uint8_t maxMcbTicksTimeout = TIMEOUT_MCB_MS / PERIOD_PID_PRIMARY_MS;
-    #else
-    const uint8_t maxMcbTicksTimeout = TIMEOUT_MCB_MS / 5.0;
-    #endif
-    
-    #ifdef HARDWARE_HOVERROBOT
-        rx_motor_control_board_t receiveMcb;
-    #endif
+    drive_controller_data_t newMotorDataReceived;
+    const uint8_t driveControllerTicksTimeout = TIMEOUT_MCB_MS / 5.0;                   
 
     while(1) {
         if(xQueueReceive(mpu6050QueueHandler,&newAngles,pdMS_TO_TICKS(10))) {
@@ -267,11 +249,6 @@ static void imuControlHandler(void *pvParameters) {
 
             speedMotors.motorL = cutSpeedRange(outputPidMotors + attitudeControlMotor.motorL) * DIRECTION_L_MOTOR;
             speedMotors.motorR = cutSpeedRange(outputPidMotors + attitudeControlMotor.motorR) * DIRECTION_R_MOTOR;
-
-            // #ifdef HARDWARE_HOVERROBOT
-            //     speedMotors.motorL = backlashAttenuator(speedMotors.motorL);
-            //     speedMotors.motorR = backlashAttenuator(speedMotors.motorR);
-            // #endif
 
             safetyLimitProm[safetyLimitPromIndex++] = statusRobot.actualPitch;
             if (safetyLimitPromIndex > 2) {
@@ -305,7 +282,6 @@ static void imuControlHandler(void *pvParameters) {
                     #endif
                 }
             }
-        
             
             statusRobot.speedTargetL = speedMotors.motorL;
             statusRobot.speedTargetR = speedMotors.motorR;
@@ -314,65 +290,58 @@ static void imuControlHandler(void *pvParameters) {
             // toggle = !toggle;
         }
 
-        #ifdef HARDWARE_HOVERROBOT
-            if (xQueueReceive(newMcbQueueHandler, &receiveMcb, 0)) {
-                contMcbTimeout = 0;
-                if (!statusRobot.isMcbConnected) {
-                    statusRobot.isMcbConnected = true;
-                    if (statusRobot.statusCode == STATUS_ROBOT_ERROR_MCB_CONNECTION) {
-                        setStatusRobot(STATUS_ROBOT_ARMED);
-                    }
-                }
 
-                #ifdef HARDWARE_MAINBOARD
-                    statusRobot.isCharging = receiveMcb.isCharging;
-                    statusRobot.tempMcb = receiveMcb.boardTemp / 10.00;
-                    errorMcbHandler(receiveMcb.statusCode);
-                #endif
-                
-                statusRobot.batVoltage = receiveMcb.batVoltage;
-                statusRobot.speedMeasR = receiveMcb.speedR_meas;
-                statusRobot.speedMeasL = receiveMcb.speedL_meas;
-                statusRobot.currentR = receiveMcb.currentR;
-                statusRobot.currentL = receiveMcb.currentL;
-                statusRobot.posInMetersR = pos2mts(receiveMcb.posR);
-                statusRobot.posInMetersL = pos2mts(receiveMcb.posL * -1);
-
-                float actual = (((statusRobot.posInMetersL + statusRobot.posInMetersR) / 2) - attitudeControlStat.offsetDistInCms);
-                statusRobot.actualDistInCms = actual * 100.00;
-
-                uint16_t maxSpeedLimit = 550;
-                #ifndef MCB_TORQUE_MODE
-                    maxSpeedLimit = 999;
-                #endif
-                
-                if (abs(statusRobot.speedMeasL) > maxSpeedLimit || abs(statusRobot.speedMeasR) > maxSpeedLimit) {
-                    attitudeControlStat.contSafetyMaxSpeed++;
-                    if (attitudeControlStat.contSafetyMaxSpeed > MAX_CYCLES_LIMIT_SPEED ) {
-                        setStatusRobot(STATUS_ROBOT_ERROR_LIMIT_SPEED);
-                        vTaskDelay(30);
-                        setStatusRobot(STATUS_ROBOT_ARMED);
-                    }
-                }
-                else {
-                    attitudeControlStat.contSafetyMaxSpeed = 0;
+        if (xQueueReceive(driveControllerDataReceiveQueue, &newMotorDataReceived, 0)) {
+            contMcbTimeout = 0;
+            if (!statusRobot.isMcbConnected) {
+                statusRobot.isMcbConnected = true;
+                if (statusRobot.statusCode == STATUS_ROBOT_ERROR_MCB_CONNECTION) {
+                    setStatusRobot(STATUS_ROBOT_ARMED);
                 }
             }
-        #elif defined(HARDWARE_PROTOTYPE)
-            motors_measurements_t newMeasureMotors = getMeasMotors();
-            statusRobot.speedMeasR = newMeasureMotors.speedMotR;
-            statusRobot.speedMeasL = newMeasureMotors.speedMotL;
-            statusRobot.posInMetersR = pos2mts(newMeasureMotors.absPosR);
-            statusRobot.posInMetersL = pos2mts(newMeasureMotors.absPosL);
-        #endif
+
+            // TODO: paso intermedio, proximo paso crear una estructura de tipo drive_controller_data_t dentro de statusRobot
+            statusRobot.batVoltage = newMotorDataReceived.batVoltage;
+            statusRobot.speedMeasRpmR = newMotorDataReceived.speedMeasRpmR;
+            statusRobot.speedMeasRpmL = newMotorDataReceived.speedMeasRpmL;
+            statusRobot.currentR = newMotorDataReceived.currentR;
+            statusRobot.currentL = newMotorDataReceived.currentL;
+            statusRobot.posInMetersR = newMotorDataReceived.posInMetersR;
+            statusRobot.posInMetersL = newMotorDataReceived.posInMetersR;
+            statusRobot.isCharging = newMotorDataReceived.isCharging;
+            statusRobot.tempMcb = newMotorDataReceived.boardTemp;
+            driveControllerStatusHandler(newMotorDataReceived.statusCode);
+
+            float actual = (((statusRobot.posInMetersL + statusRobot.posInMetersR) / 2) - attitudeControlStat.offsetDistInCms);
+            statusRobot.actualDistInCms = actual * 100.00;
+
+            uint16_t maxSpeedLimit = 550;
+            #ifdef HARDWARE_PROTOTYPE
+                maxSpeedLimit = 2999;
+            #elifndef MCB_TORQUE_MODE
+                maxSpeedLimit = 999;
+            #endif
+            
+            if (abs(statusRobot.speedMeasRpmL) > maxSpeedLimit || abs(statusRobot.speedMeasRpmR) > maxSpeedLimit) {
+                attitudeControlStat.contSafetyMaxSpeed++;
+                if (attitudeControlStat.contSafetyMaxSpeed > MAX_CYCLES_LIMIT_SPEED) {
+                    setStatusRobot(STATUS_ROBOT_ERROR_LIMIT_SPEED);
+                    vTaskDelay(30);
+                    setStatusRobot(STATUS_ROBOT_ARMED);
+                }
+            }
+            else {
+                attitudeControlStat.contSafetyMaxSpeed = 0;
+            }
+        }
 
         contMcbTimeout++;
-        if(contMcbTimeout > maxMcbTicksTimeout) {
+        if(contMcbTimeout > driveControllerTicksTimeout) {
             statusRobot.isMcbConnected = false;
             setStatusRobot(STATUS_ROBOT_ERROR_MCB_CONNECTION);
         }
 
-        xQueueSend(motorControlQueueHandler,&speedMotors,0);        // Cada 5ms aprox
+        xQueueSend(driveControllerMotorQueue, &speedMotors, 0);        // Cada 5ms aprox
     }
 }
 
@@ -380,7 +349,7 @@ static void attitudeControl(void *pvParameters){
     float targetLinearRpm = 0.00;       // velocidad lineal en RPM * 10
     uint8_t isYawControlEnabled = false;
     const char *TAG = "AttitudeControlTask";
-    uint8_t toggle = false;
+    uint8_t cont = 0;
 
     TickType_t lastWake = xTaskGetTickCount();
 
@@ -408,7 +377,7 @@ static void attitudeControl(void *pvParameters){
                 pidSetDisable(PID_YAW);
                 // Yaw manual control: Convierto la velocidad angular rad/s a velocidad de los motores para rotar a esa velocidad
                 float wheelLinearVelocity = (statusRobot.dirControl.angularVel / 100.00) * (WHEEL_BASE/2.00);
-                attitudeControlMotor.motorR = CONVERT_MPS_TO_RPM(wheelLinearVelocity);
+                attitudeControlMotor.motorR = mps2rpm(wheelLinearVelocity);
                 attitudeControlMotor.motorL = attitudeControlMotor.motorR * -1;
             }
 
@@ -422,14 +391,19 @@ static void attitudeControl(void *pvParameters){
                     ESP_LOGI(TAG,"Enable POS_CONTROL");
                 }
          
-                targetLinearRpm = (pidCalculate(PID_POS, statusRobot.actualDistInCms) * MAX_VELOCITY_RPM_CONTROL) / 10.00; 
+                targetLinearRpm = (pidCalculate(PID_POS, statusRobot.actualDistInCms) * mps2rpm(MAX_VELOCITY_CONTROL_IN_MPS)) / 10.00; 
+
+                if (cont++ > 10) {
+                    cont = 0;
+                    ESP_LOGI("posControl", "targetLinearRpm: %f, actualDist: %f", targetLinearRpm, statusRobot.actualDistInCms);
+                }
             }
             else {
                 float linearVelMps = statusRobot.dirControl.linearVel / 100.00;
                 linearVelMps = fmaxf(-MAX_VELOCITY_MPS_CONTROL, fminf(MAX_VELOCITY_MPS_CONTROL, linearVelMps)); // Limito la velocidad maxima permitida
 
-                // targetLinearVel = CONVERT_MPS_TO_RPM(statusRobot.dirControl.linearVel / 10.00);     // TODO: es linearVel /100(normalizo) * 10 (para que de en m/s *10)
-                targetLinearRpm = CONVERT_MPS_TO_RPM(linearVelMps) / 10.00; 
+                // targetLinearVel = mps2rpm(statusRobot.dirControl.linearVel / 10.00);     // TODO: es linearVel /100(normalizo) * 10 (para que de en m/s *10)
+                targetLinearRpm = mps2rpm(linearVelMps) / 10.00; 
                 if (attitudeControlStat.attMode != ATT_MODE_MANUAL_CONTROL) {
                     pidSetDisable(PID_POS);
                     statusRobot.localConfig.pids[PID_POS].setPoint = 0.00;
@@ -441,7 +415,7 @@ static void attitudeControl(void *pvParameters){
             statusRobot.localConfig.pids[PID_SPEED].setPoint = targetLinearRpm;
             pidSetSetPoint(PID_SPEED, targetLinearRpm);
 
-            int16_t meanSpeedMeas = (statusRobot.speedMeasR - statusRobot.speedMeasL) / 20.00;       // velocidad maxima deberia ser 1000
+            int16_t meanSpeedMeas = (statusRobot.speedMeasRpmR - statusRobot.speedMeasRpmL) / 20.00;       // velocidad maxima deberia ser 1000
             float desiredAngleControl = (float)(pidCalculate(PID_SPEED, meanSpeedMeas) * MAX_ANGLE_CONTROL); 
 
             if (statusRobot.statusCode != STATUS_ROBOT_TEST_MODE) {           // TODO: buscar un mejor mecanismo
@@ -454,6 +428,7 @@ static void attitudeControl(void *pvParameters){
             }
         }
 
+        // ESP_LOGI("imuControlTask", "posInMetersR: %f", statusRobot.posInMetersR);
         vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(PERIOD_PID_SECONDARY_MS));
     }
 }
@@ -581,10 +556,10 @@ static void commsManager(void *pvParameters) {
                 .imuTemp = statusRobot.tempImu * PRECISION_DECIMALS_COMMS,
                 .mcbTemp = statusRobot.tempMcb * PRECISION_DECIMALS_COMMS,      // Ya esta multiplicada por 1000 desde la mcb
                 .mainboardTemp = statusRobot.tempMainboard,
-                .speedMeasR = CONVERT_RPM_TO_MPS(statusRobot.speedMeasR) * PRECISION_DECIMALS_COMMS,
-                .speedMeasL = CONVERT_RPM_TO_MPS(statusRobot.speedMeasL) * PRECISION_DECIMALS_COMMS,
+                .speedMeasMsR = rpm2mps(statusRobot.speedMeasRpmR) * PRECISION_DECIMALS_COMMS,
+                .speedMeasMsL = rpm2mps(statusRobot.speedMeasRpmL) * PRECISION_DECIMALS_COMMS,
                 .posWheelR = statusRobot.posInMetersR * PRECISION_DECIMALS_COMMS,
-                .posWheelL =  statusRobot.posInMetersL * PRECISION_DECIMALS_COMMS,
+                .posWheelL = statusRobot.posInMetersL * PRECISION_DECIMALS_COMMS,
                 .currentR = statusRobot.currentR,                               // Ya esta multiplicada por 100 desde la MCB
                 .currentL = statusRobot.currentL,                               // Ya esta multiplicada por 100 desde la MCB
                 .pitch =  statusRobot.actualPitch * PRECISION_DECIMALS_COMMS,
@@ -601,7 +576,7 @@ static void commsManager(void *pvParameters) {
                 .setPointAngle = statusRobot.localConfig.pids[PID_ANGLE].setPoint * PRECISION_DECIMALS_COMMS,
                 .setPointPos = statusRobot.localConfig.pids[PID_POS].setPoint,                                          // No lo multiplico, para mandarlo en mts
                 .setPointYaw = statusRobot.localConfig.pids[PID_YAW].setPoint * PRECISION_DECIMALS_COMMS,
-                .setPointSpeed = CONVERT_RPM_TO_MPS(statusRobot.localConfig.pids[PID_SPEED].setPoint) * PRECISION_DECIMALS_COMMS * -10,      // El setpoint en el PID es RPM/10
+                .setPointSpeed = rpm2mps(statusRobot.localConfig.pids[PID_SPEED].setPoint) * PRECISION_DECIMALS_COMMS * -10,      // El setpoint en el PID es RPM/10
                 .statusCode = statusRobot.statusCode
             };
             sendDynamicData(newData);
@@ -679,33 +654,38 @@ void app_main() {
     // gpio_set_direction(PIN_LED , GPIO_MODE_OUTPUT);
     // gpio_set_level(PIN_LED, 1);
 
+    statusRobot.localConfig.versionFirmware = VERSION_FIRMWARE;
+
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[PIN_OSCILO], PIN_FUNC_GPIO);
     gpio_set_direction(PIN_OSCILO , GPIO_MODE_OUTPUT);
     gpio_set_level(PIN_OSCILO, 1);
 
-    gpio_set_direction(GPIO_INPUT_NAV_COMMS_MODE , GPIO_MODE_INPUT);
-    gpio_set_pull_mode(GPIO_INPUT_NAV_COMMS_MODE, GPIO_PULLUP_ONLY);
+    #ifdef HARDWARE_MAINBOARD
+        gpio_set_direction(GPIO_INPUT_NAV_COMMS_MODE , GPIO_MODE_INPUT);
+        gpio_set_pull_mode(GPIO_INPUT_NAV_COMMS_MODE, GPIO_PULLUP_ONLY);
+    #endif
 
     receiveControlQueueHandler = xQueueCreate(1, sizeof(velocity_command_t));
     newPidParamsQueueHandler = xQueueCreate(1, sizeof(pid_settings_comms_t));
     newCommandQueueHandler = xQueueCreate(1,  sizeof(command_app_raw_t));
-    motorControlQueueHandler = xQueueCreate(1, sizeof(output_motors_t));
+    driveControllerMotorQueue = xQueueCreate(1, sizeof(drive_controller_motor_control_t));
+    driveControllerDataReceiveQueue = xQueueCreate(1, sizeof(drive_controller_data_t));
     mpu6050QueueHandler = xQueueCreate(1, sizeof(vector_queue_t));
     socketConnectionStateQueueHandler = xQueueCreate(1, sizeof(uint8_t));
     networkStateQueueHandler = xQueueCreate(1, sizeof(bool));
     collisionSensorsQueue = xQueueCreate(1, sizeof(float)*4);
 
-    #ifdef HARDWARE_HOVERROBOT
-        newMcbQueueHandler = xQueueCreate(1,sizeof(rx_motor_control_board_t));
-    #endif
-
     xStreamBufferSender = xStreamBufferCreate(STREAM_BUFFER_SIZE, STREAM_BUFFER_LENGTH_TRIGGER);
     xStreamBufferReceiver = xStreamBufferCreate(STREAM_BUFFER_SIZE, STREAM_BUFFER_LENGTH_TRIGGER);
     
-    xTaskCreate(statusLedHandler,"status led handler",2048,socketConnectionStateQueueHandler,2,NULL);
+    #ifdef HARDWARE_MAINBOARD
+        // newMcbQueueHandler = xQueueCreate(1,sizeof(rx_motor_control_board_t));       // TODO: eliminar
+        xTaskCreate(statusLedHandler, "status led handler", 2048, socketConnectionStateQueueHandler, 2, NULL);
+    #endif
+
     setStatusRobot(STATUS_ROBOT_INIT);
 
-    #ifdef HARDWARE_HOVERROBOT
+    #ifdef HARDWARE_MAINBOARD
         // TORQUE MODE:
         #ifdef MCB_TORQUE_MODE
             statusRobot.localConfig.pids[PID_ANGLE].kp = 0.6;
@@ -743,9 +723,7 @@ void app_main() {
         #endif
 
         statusRobot.localConfig.safetyLimits = 45;
-    #endif
-
-    #ifdef HARDWARE_PROTOTYPE
+    #elif defined(HARDWARE_PROTOTYPE)
         statusRobot.localConfig.pids[PID_ANGLE].kp = 1.48;
         statusRobot.localConfig.pids[PID_ANGLE].ki = 0.52;
         statusRobot.localConfig.pids[PID_ANGLE].kd = 0.21;
@@ -776,7 +754,7 @@ void app_main() {
         ESP_LOGI(TAG,"PID %d Params: kp: %.02f\tki: %.02f\tkd: %.02f\tsetPoint: %.02f",i,statusRobot.localConfig.pids[i].kp,statusRobot.localConfig.pids[i].ki,statusRobot.localConfig.pids[i].kd,statusRobot.localConfig.pids[i].setPoint);
     }
     ESP_LOGI(TAG, "\n------------------- local config -------------------\n"); 
-    
+
     mpu6050_init_t configMpu = {
         .intGpio = GPIO_MPU_INT,
         .sclGpio = GPIO_MPU_SCL,
@@ -793,44 +771,24 @@ void app_main() {
     pidConfig.pids[PID_YAW] = convertPidFloatToStruct(statusRobot.localConfig.pids[PID_YAW] ,PERIOD_PID_SECONDARY_MS);
     pidInit(pidConfig);
 
-    #ifdef HARDWARE_HOVERROBOT
-        config_init_mcb_t configMcb = {
-            .numUart = UART_PORT_CAN,
-            .txPin = GPIO_CAN_TX,
-            .rxPin = GPIO_CAN_RX,
-            .queue = newMcbQueueHandler,
-            .core = 0
+    #ifdef HARDWARE_MAINBOARD
+        ultrasonic_config_t UltrasonicConfig = {
+            .gpioTrig = GPIO_ULTRASONIC_TRIG,
+            .gpioSensor[ULTRASONIC_FRONT_LEFT] = GPIO_ULTRASONIC_FRONT_L,
+            .gpioSensor[ULTRASONIC_FRONT_RIGHT] = GPIO_ULTRASONIC_FRONT_R,
+            .gpioSensor[ULTRASONIC_REAR_LEFT] = GPIO_ULTRASONIC_REAR_L,
+            .gpioSensor[ULTRASONIC_REAR_RIGHT] = GPIO_ULTRASONIC_REAR_R,
+            .updateQueue = collisionSensorsQueue,
         };
-        mcbInit(&configMcb);
+        ultrasonicInit(&UltrasonicConfig);
     #endif
 
-    #ifdef HARDWARE_PROTOTYPE
-        stepper_config_t configMotors = {
-            .gpio_mot_l_step = GPIO_MOT_L_STEP,
-            .gpio_mot_l_dir = GPIO_MOT_L_DIR,
-            .gpio_mot_r_step = GPIO_MOT_R_STEP,
-            .gpio_mot_r_dir = GPIO_MOT_R_DIR,
-            .gpio_mot_enable = GPIO_MOT_ENABLE,
-            .gpio_mot_microstepper = GPIO_MOT_MICRO_STEP
-        };
-        motorsInit(configMotors);
-        setMicroSteps(true);
-    #endif
-
-    ultrasonic_config_t UltrasonicConfig = {
-        .gpioTrig = GPIO_ULTRASONIC_TRIG,
-        .gpioSensor[ULTRASONIC_FRONT_LEFT] = GPIO_ULTRASONIC_FRONT_L,
-        .gpioSensor[ULTRASONIC_FRONT_RIGHT] = GPIO_ULTRASONIC_FRONT_R,
-        .gpioSensor[ULTRASONIC_REAR_LEFT] = GPIO_ULTRASONIC_REAR_L,
-        .gpioSensor[ULTRASONIC_REAR_RIGHT] = GPIO_ULTRASONIC_REAR_R,
-        .updateQueue = collisionSensorsQueue,
-    };
-    ultrasonicInit(&UltrasonicConfig);
+    driveControllerInit(driveControllerMotorQueue, driveControllerDataReceiveQueue);
 
     setStatusRobot(STATUS_ROBOT_ARMED);
     xTaskCreatePinnedToCore(imuControlHandler,"Imu Control",4096,NULL,IMU_HANDLER_PRIORITY,&imuTaskHandler,IMU_HANDLER_CORE);
     xTaskCreatePinnedToCore(attitudeControl,"attitude control",4096,NULL,ATTITUDE_HANDLER_PRIORITY, NULL,IMU_HANDLER_CORE);
-    xTaskCreatePinnedToCore(commsManager,"communication manager",4096,NULL,COMM_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);;
+    xTaskCreatePinnedToCore(commsManager,"communication manager",4096,NULL,COMM_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);
 
     // ESP_LOGI(TAG, "Wifi mode AP");
     // initWifi(ESP_WIFI_SSID_AP, ESP_WIFI_PASS_AP, WIFI_MODE_AP, networkStateQueueHandler);
@@ -838,29 +796,39 @@ void app_main() {
     ESP_LOGI(TAG, "Wifi mode STA");
     initWifi(ESP_WIFI_SSID_STA, ESP_WIFI_PASS_STA, WIFI_MODE_STA, networkStateQueueHandler);
 
-    if (gpio_get_level(GPIO_INPUT_NAV_COMMS_MODE)) {   // Conexion de navegacion via puerto serie
-        config_init_nav_t configSerialClient = {
-            .numUart = UART_PORT_NAV,
-            .txPin = GPIO_NAV_TX,
-            .rxPin = GPIO_NAV_RX,
-            .baudrate = UART_NAV_BAUD,
-            .xStreamBufferSend = xStreamBufferSender,
-            .xStreamBufferRecv = xStreamBufferReceiver,
-            .connectionQueueHandler = socketConnectionStateQueueHandler,
-            .core = COMMS_HANDLER_CORE,
-        };
-        navComms(&configSerialClient);
+    #ifdef HARDWARE_MAINBOARD
+        bool isNavSerialEnabled = gpio_get_level(GPIO_INPUT_NAV_COMMS_MODE);
+        if (isNavSerialEnabled) {   // Conexion de navegacion via puerto serie
+            config_init_nav_t configSerialClient = {
+                .numUart = UART_PORT_NAV,
+                .txPin = GPIO_NAV_TX,
+                .rxPin = GPIO_NAV_RX,
+                .baudrate = UART_NAV_BAUD,
+                .xStreamBufferSend = xStreamBufferSender,
+                .xStreamBufferRecv = xStreamBufferReceiver,
+                .connectionQueueHandler = socketConnectionStateQueueHandler,
+                .core = COMMS_HANDLER_CORE,
+            };
+            navComms(&configSerialClient);
 
-        comms_start_up();
-    } else {                                            // Conexion de navegacion via SOCKET TCP
+            comms_start_up();
+        } else {                                            // Conexion de navegacion via SOCKET TCP
+            tcp_socket_config_t configSocket = {
+                .connectionQueueHandler = socketConnectionStateQueueHandler,
+                .xStreamBufferSend = xStreamBufferSender,
+                .xStreamBufferRecv = xStreamBufferReceiver
+            };
+            initTcpServerSocket(configSocket);
+            // initTcpClientSocket(configSocket);
+        }
+    #else 
         tcp_socket_config_t configSocket = {
             .connectionQueueHandler = socketConnectionStateQueueHandler,
             .xStreamBufferSend = xStreamBufferSender,
             .xStreamBufferRecv = xStreamBufferReceiver
         };
         initTcpServerSocket(configSocket);
-        // initTcpClientSocket(configSocket);
-    }
+    #endif
 
     udpLoggerInit(514); // Inicio modulo de logs
 
