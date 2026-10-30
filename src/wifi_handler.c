@@ -9,6 +9,7 @@
 #include "esp_log.h"
 #include <string.h>
 #include "main.h"
+#include "mdns.h"
 
 /* The event group allows multiple bits for each event, but we only care about two events:
  * - we are connected to the AP with an IP
@@ -25,11 +26,30 @@
 static EventGroupHandle_t s_wifi_event_group;
 
 static const char *TAG = "WIFI HANDLER";
+static bool mdnsInitialized = false;
 
 static void updateConnectionState(QueueHandle_t stateQueueHandler, bool state) {
     if (xQueueOverwrite(stateQueueHandler, &state) != pdPASS) {
         ESP_LOGE(TAG, "Error al enviar el nuevo estado de network");
     }
+}
+
+static void mdnsInit(void) {
+    ESP_LOGI("MDNS_HOST", "MDNS INIT");
+    ESP_ERROR_CHECK(mdns_init());
+    ESP_ERROR_CHECK(mdns_hostname_set(MDNS_NAME));
+    ESP_ERROR_CHECK(mdns_instance_name_set(MDNS_NAME));
+
+    ESP_ERROR_CHECK(
+        mdns_service_add(
+            NULL,
+            "_http",
+            "_tcp",
+            80,
+            NULL,
+            0
+        )
+    );
 }
 
 /* 
@@ -140,10 +160,15 @@ static void wifi_event_handler_sta(void *arg, esp_event_base_t event_base,
         esp_wifi_connect();
         ESP_LOGI(TAG, "retry to connect to the AP");
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
-        updateConnectionState(networkStateHandler, true);
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+
+        if (!mdnsInitialized) {
+            mdnsInit();
+            mdnsInitialized = true;
+        }
+        updateConnectionState(networkStateHandler, true);
     }
 }
 

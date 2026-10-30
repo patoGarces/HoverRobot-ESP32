@@ -22,6 +22,7 @@
 /* Incluyo componentes */
 #include "tcp_socket_component.h"
 #include "nav_comms.h"
+#include "OTA_SERVER.h"
 
 extern QueueHandle_t mpu6050QueueHandler;                   // Recibo nuevos angulos obtenidos del MPU
 QueueHandle_t driveControllerMotorQueue;                     // Envio nuevos valores de salida para el control de motores
@@ -174,6 +175,10 @@ void setStatusRobot(uint8_t newStatus) {
         #endif
         statusRobot.statusCode = newStatus;
     }
+}
+
+static const uint8_t getRobotStatus(void) {
+    return (uint8_t)statusRobot.statusCode;
 }
 
 static void driveControllerStatusHandler(drive_controller_status_code_t statusCode) {
@@ -539,6 +544,11 @@ static void commsManager(void *pvParameters) {
         if (networkState != lastNetworkState) {
             ESP_LOGI(TAG, "Nuevo estado de conexion wifi: %d", networkState);
             lastNetworkState = networkState;
+
+            if (networkState) {
+                otaServerSetModeProvider(getRobotStatus);
+                otaServerStart();
+            }
         }
 
         xQueuePeek(socketConnectionStateQueueHandler, &socketClientsConnected,0);       // Leo el ultimo valor emitido, sin sacarlo de la queue

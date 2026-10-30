@@ -1,0 +1,297 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#101820">
+    <title>HoverRobot | Firmware Update</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <main class="container">
+        <header class="header">
+            <div class="brand">
+                <div class="brand-icon">H</div>
+                <div>
+                    <h1>HoverRobot</h1>
+                    <p>CONTROL PANEL</p>
+                </div>
+            </div>
+        </header>
+
+        <section class="status-card">
+            <div class="section-heading">
+                <span class="eyebrow">SISTEMA</span>
+            </div>
+
+            <div class="metrics">
+                <div class="metric">
+                    <span class="field-label">FIRMWARE</span>
+                    <strong id="fwVersion">--</strong>
+                </div>
+                <div class="metric">
+                    <span class="field-label">UPTIME</span>
+                    <strong id="uptime">--</strong>
+                </div>
+            </div>
+        </section>
+
+        <section class="ota-card">
+            <div class="section-heading">
+                <div>
+                    <span class="eyebrow">MANTENIMIENTO</span>
+                    <h2>Firmware Update</h2>
+                </div>
+                <span class="ota-icon">↥</span>
+            </div>
+
+            <p class="description">
+                Instala una nueva versión del firmware del HoverRobot.
+                El dispositivo se reiniciará al finalizar.
+            </p>
+
+            <div class="file-area">
+                <label for="file" class="file-label">
+                    <span class="file-icon">＋</span>
+                    <span id="fileName">Seleccionar archivo .bin</span>
+                </label>
+                <input type="file" id="file" accept=".bin">
+            </div>
+
+            <button id="uploadButton" disabled>
+                Actualizar firmware
+            </button>
+
+            <div id="progress" class="progress hidden">
+                <div class="progress-info">
+                    <span id="progressLabel">Enviando firmware</span>
+                    <strong id="progressText">0%</strong>
+                </div>
+                <div class="progress-track">
+                    <div id="progressBar" class="progress-bar"></div>
+                </div>
+            </div>
+
+            <p id="otaMessage" class="ota-message">
+                Seleccioná un archivo de firmware para continuar.
+            </p>
+        </section>
+    </main>
+
+    <div id="overlay" class="overlay hidden">
+        <div class="overlay-card">
+            <div class="spinner"></div>
+            <h2 id="overlayTitle">Reiniciando</h2>
+            <p id="overlayText">
+                Esperando que el HoverRobot vuelva a estar disponible.
+            </p>
+        </div>
+    </div>
+
+<script>
+const fileInput = document.getElementById("file");
+const uploadButton = document.getElementById("uploadButton");
+const otaMessage = document.getElementById("otaMessage");
+
+let isUploading = false;
+let uptimeSeconds = 0;
+let uptimeLoaded = false;
+
+function formatUptime(seconds) {
+    const value = Math.max(0, Math.floor(seconds));
+    const h = Math.floor(value / 3600);
+    const m = Math.floor((value % 3600) / 60);
+    const s = value % 60;
+
+    return `${h}h ${m}m ${s}s`;
+}
+
+async function loadSystemInfo() {
+    try {
+        const response = await fetch("/status", { cache: "no-store" });
+        if (!response.ok) throw new Error();
+
+        const status = await response.json();
+
+        document.getElementById("fwVersion").textContent =
+            "v" + (status.version || "--");
+
+        uptimeSeconds = Math.max(0, Number(status.uptime) || 0);
+        updateUptime();
+        uptimeLoaded = true;
+    } catch {
+        document.getElementById("fwVersion").textContent = "--";
+        document.getElementById("uptime").textContent = "--";
+    }
+}
+
+function updateUptime() {
+    document.getElementById("uptime").textContent =
+        formatUptime(uptimeSeconds);
+}
+
+setInterval(() => {
+    if (!uptimeLoaded) return;
+    uptimeSeconds++;
+    updateUptime();
+}, 1000);
+
+function updateUploadAvailability() {
+    const hasFile = fileInput.files.length > 0;
+
+    fileInput.disabled = isUploading;
+    uploadButton.disabled = isUploading || !hasFile;
+
+    if (isUploading) {
+        otaMessage.textContent =
+            "Validando o enviando firmware. No desconectes el dispositivo.";
+    } else {
+        otaMessage.textContent = hasFile
+            ? "Firmware listo para instalar."
+            : "Seleccioná un archivo de firmware para continuar.";
+    }
+}
+
+function showWarning(message) {
+    otaMessage.textContent = "⚠ " + message;
+    alert(message);
+}
+
+fileInput.addEventListener("change", () => {
+    const file = fileInput.files[0];
+
+    document.getElementById("fileName").textContent =
+        file ? file.name : "Seleccionar archivo .bin";
+
+    updateUploadAvailability();
+});
+
+uploadButton.addEventListener("click", upload);
+
+async function upload() {
+    const file = fileInput.files[0];
+
+    if (!file || isUploading) return;
+
+    if (!confirm(
+        "¿Estás seguro de actualizar el firmware?\n\n" +
+        "El HoverRobot se reiniciará al finalizar."
+    )) return;
+
+    isUploading = true;
+    updateUploadAvailability();
+
+    try {
+        const check = await fetch("/update/check", {
+            method: "POST",
+            cache: "no-store"
+        });
+
+        if (check.status === 409) {
+            isUploading = false;
+            updateUploadAvailability();
+            showWarning(
+                "Actualización bloqueada: el robot está en modo STABILIZED. Desactivá la estabilización para continuar."
+            );
+            return;
+        }
+
+        if (!check.ok) {
+            throw new Error("No se pudo validar el estado del robot.");
+        }
+    } catch (error) {
+        isUploading = false;
+        updateUploadAvailability();
+        showWarning(error.message || "Error al validar el estado del robot.");
+        return;
+    }
+
+    const progress = document.getElementById("progress");
+    const bar = document.getElementById("progressBar");
+    const percent = document.getElementById("progressText");
+    const progressLabel = document.getElementById("progressLabel");
+
+    progress.classList.remove("hidden");
+    bar.style.width = "0%";
+    percent.textContent = "0%";
+    progressLabel.textContent = "Enviando firmware";
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/update", true);
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+
+    xhr.upload.onprogress = event => {
+        if (!event.lengthComputable) return;
+
+        const value = Math.round(event.loaded * 100 / event.total);
+        bar.style.width = value + "%";
+        percent.textContent = value + "%";
+    };
+
+    xhr.onload = () => {
+        if (xhr.status === 200) {
+            bar.style.width = "100%";
+            percent.textContent = "100%";
+            progressLabel.textContent = "Firmware recibido";
+
+            document.getElementById("overlay").classList.remove("hidden");
+            document.getElementById("overlayTitle").textContent =
+                "Actualización completada";
+            document.getElementById("overlayText").textContent =
+                "Esperando que el HoverRobot se reinicie...";
+
+            setTimeout(waitUntilOnline, 3000);
+            return;
+        }
+
+        isUploading = false;
+        progress.classList.add("hidden");
+        updateUploadAvailability();
+
+        if (xhr.status === 409) {
+            showWarning(
+                "Actualización bloqueada: el robot pasó a modo STABILIZED."
+            );
+        } else {
+            showWarning(
+                xhr.responseText || "El servidor rechazó la actualización."
+            );
+        }
+    };
+
+    xhr.onerror = () => {
+        isUploading = false;
+        progress.classList.add("hidden");
+        updateUploadAvailability();
+        showWarning("Error de comunicación durante la actualización.");
+    };
+
+    xhr.send(file);
+}
+
+function waitUntilOnline() {
+    fetch("/", { cache: "no-store" })
+        .then(response => {
+            if (!response.ok) throw new Error();
+
+            document.getElementById("overlayTitle").textContent =
+                "HoverRobot conectado";
+            document.getElementById("overlayText").textContent =
+                "El dispositivo volvió a estar disponible.";
+
+            setTimeout(() => location.reload(), 1000);
+        })
+        .catch(() => {
+            document.getElementById("overlayText").textContent =
+                "Esperando que el dispositivo vuelva a estar disponible...";
+
+            setTimeout(waitUntilOnline, 1000);
+        });
+}
+
+loadSystemInfo();
+updateUploadAvailability();
+</script>
+</body>
+</html>

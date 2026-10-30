@@ -5,6 +5,7 @@
 
 // PARA DETECTAR EL ESP32S3: CONFIG_IDF_TARGET_ESP32S3
 
+#define MDNS_NAME           "HoverRobot"
 #define VERSION_FIRMWARE    0x01
 
 // #define THROTTLE_HOLD_MODE      // DESHABILITA EL MODO STABILIZE
@@ -165,7 +166,7 @@ enum {
 };
 
 // ATENCION: este enum esta emparejado con una enum class en la app, se deben modificar a la vez
-enum {
+typedef enum {
     STATUS_ROBOT_INIT,
     STATUS_ROBOT_DISABLE,
     STATUS_ROBOT_ARMED,
@@ -181,7 +182,7 @@ enum {
     STATUS_ROBOT_ERROR_TEMP,
     STATUS_ROBOT_ERROR_BATTERY,
     STATUS_ROBOT_TEST_MODE
-};
+} status_robot_enum_t;
 
 typedef struct {
     float kp;
@@ -236,5 +237,7 @@ typedef struct {
 } status_robot_t;
 
 uint32_t ipAddressToUin32(uint8_t ip1,uint8_t ip2,uint8_t ip3,uint8_t ip4);
+uint8_t getStatusRobot(void);
+const char *statusRobotToString(status_robot_enum_t status);
 
 #endif
