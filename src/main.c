@@ -398,10 +398,10 @@ static void attitudeControl(void *pvParameters){
          
                 targetLinearRpm = (pidCalculate(PID_POS, statusRobot.actualDistInCms) * mps2rpm(MAX_VELOCITY_CONTROL_IN_MPS)) / 10.00; 
 
-                if (cont++ > 10) {
-                    cont = 0;
-                    ESP_LOGI("posControl", "targetLinearRpm: %f, actualDist: %f", targetLinearRpm, statusRobot.actualDistInCms);
-                }
+                // if (cont++ > 10) {
+                //     cont = 0;
+                //     ESP_LOGI("posControl", "targetLinearRpm: %f, actualDist: %f", targetLinearRpm, statusRobot.actualDistInCms);
+                // }
             }
             else {
                 float linearVelMps = statusRobot.dirControl.linearVel / 100.00;

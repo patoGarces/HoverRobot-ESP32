@@ -22,7 +22,6 @@ static const char *TAG = "COMMS HANDLER";
 static void communicationHandler(void * param);
 
 void comms_start_up(void) {
-
     ESP_LOGE(TAG,"COMMS START UP");
     xTaskCreatePinnedToCore(communicationHandler, "communicationHandler", 4096, NULL, 10, &commsHandle,COMMS_HANDLER_CORE);
 }
@@ -42,6 +41,7 @@ static void communicationHandler(void * param) {
     pid_settings_comms_t        pidSettingsComms;
     velocity_command_t          newControlVal;
     command_app_raw_t           newCommand;
+    TickType_t lastWake = xTaskGetTickCount();
     
     while(true) {
         BaseType_t bytes_received = xStreamBufferReceive(xStreamBufferReceiver, received_data, sizeof(received_data), 0);
@@ -90,7 +90,7 @@ static void communicationHandler(void * param) {
             contTimeout++;
         }
 
-        vTaskDelay(pdMS_TO_TICKS(10)); 
+        vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(10));
     }
     vTaskDelete(NULL);
 }
