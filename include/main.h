@@ -62,6 +62,10 @@
 
 #define FUSE_ALPHA_YAW      0.9     // Ponderacion Yaw Imu
 
+// ANTI COLLISION
+#define SAFETY_DISTANCE_COLLISION_CM    50.0f
+#define MARGIN_DISTANCE_COLLISION_CM    5.0f
+
 #ifdef HARDWARE_PROTOTYPE
     #define MAX_ANGLE_CONTROL           15.0
     #define MAX_ROTATION_RATE_CONTROL   100
@@ -164,6 +168,11 @@ enum {
     ATT_MODE_POS_CONTROL,
     ATT_MODE_MANUAL_CONTROL,
 };
+
+typedef enum {
+    ANTI_COLLISION_AVOIDING,
+    ANTI_COLLISION_IDLE
+} anti_collision_state_t;
 
 // ATENCION: este enum esta emparejado con una enum class en la app, se deben modificar a la vez
 typedef enum {

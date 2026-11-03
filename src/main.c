@@ -115,7 +115,6 @@ void setStatusRobot(uint8_t newStatus) {
     
     if (statusRobot.statusCode != newStatus) {
         switch(newStatus) {
-
             case STATUS_ROBOT_INIT:
             case STATUS_ROBOT_TEST_MODE:
             break;
@@ -157,6 +156,7 @@ void setStatusRobot(uint8_t newStatus) {
             case STATUS_ROBOT_ERROR_IMU:
             case STATUS_ROBOT_ERROR_TEMP:
             case STATUS_ROBOT_ERROR_LIMIT_SPEED:
+            case STATUS_ROBOT_ERROR_LIMIT_ANGLE:
             case STATUS_ROBOT_ERROR_MCB_CONNECTION:
                 speedMotors.enable = false;
                 speedMotors.motorL = 0;
@@ -166,7 +166,7 @@ void setStatusRobot(uint8_t newStatus) {
             break;
 
             default:
-                ESP_LOGE(TAG,"Unknown state");
+                ESP_LOGE(TAG,"Unknown state: %d", newStatus);
             break;
         }
 
@@ -177,8 +177,20 @@ void setStatusRobot(uint8_t newStatus) {
     }
 }
 
-static const uint8_t getRobotStatus(void) {
+static uint8_t getRobotStatus(void) {
     return (uint8_t)statusRobot.statusCode;
+}
+
+static bool collisionDetected(void) {
+    const float minCollisionDistanceCm = 50.0f;
+    
+    for (uint8_t i=0;i<4;i++) {
+        if (statusRobot.collisionSensors[i] > 0.0f &&
+            statusRobot.collisionSensors[i] < minCollisionDistanceCm) {
+            return true;
+        }
+    }    
+    return false;
 }
 
 static void driveControllerStatusHandler(drive_controller_status_code_t statusCode) {
@@ -536,10 +548,6 @@ static void commsManager(void *pvParameters) {
             }            
         }
 
-        if (xQueueReceive(collisionSensorsQueue, statusRobot.collisionSensors, 0)) {
-            // ESP_LOGI(TAG, " distance: FR: %.02f cm\tFL: %.02f cm\tRR: %.02f cm\tRL: %.02f cm", statusRobot.collisionSensors[ULTRASONIC_FRONT_RIGHT], statusRobot.collisionSensors[ULTRASONIC_FRONT_LEFT], statusRobot.collisionSensors[ULTRASONIC_REAR_RIGHT], statusRobot.collisionSensors[ULTRASONIC_REAR_LEFT]);  
-        }
-
         xQueuePeek(networkStateQueueHandler, &networkState, 0);
         if (networkState != lastNetworkState) {
             ESP_LOGI(TAG, "Nuevo estado de conexion wifi: %d", networkState);
@@ -595,6 +603,44 @@ static void commsManager(void *pvParameters) {
         vTaskDelay(pdMS_TO_TICKS(25));
     }
 }
+
+static void antiCollisionTask(void *pvParameters) {
+    anti_collision_state_t collisionState = ANTI_COLLISION_IDLE;
+    const char *TAG = "AntiCollision";
+
+    TickType_t lastWake = xTaskGetTickCount();
+
+    while(true) {
+        if (xQueueReceive(collisionSensorsQueue, statusRobot.collisionSensors, 0)) {
+
+            if (statusRobot.statusCode == STATUS_ROBOT_STABILIZED) {
+                if (collisionDetected() && collisionState == ANTI_COLLISION_IDLE) {
+                    float minDistance = fminf(statusRobot.collisionSensors[ULTRASONIC_FRONT_RIGHT], statusRobot.collisionSensors[ULTRASONIC_FRONT_LEFT]);
+
+                    if (minDistance > 0.0f) {
+                        float newDistance = statusRobot.actualDistInCms - (SAFETY_DISTANCE_COLLISION_CM - minDistance);
+                        ESP_LOGI(TAG, "Collision detected -> actual sp: %.02f cm\t new sp: %.02f, distancia: %.02f",statusRobot.actualDistInCms, newDistance, fabsf(newDistance - statusRobot.actualDistInCms));
+                        attitudeControlStat.setPointPosCms = newDistance;
+                        statusRobot.localConfig.pids[PID_POS].setPoint = newDistance;
+                        pidSetSetPoint(PID_POS, newDistance);
+                        collisionState = ANTI_COLLISION_AVOIDING;
+                    }
+                } else if (collisionState == ANTI_COLLISION_AVOIDING) {
+                    float distance = fabsf(attitudeControlStat.setPointPosCms - statusRobot.actualDistInCms);
+                    ESP_LOGI(TAG, "Avoiding collision: %.02f", distance);
+                    if (distance < MARGIN_DISTANCE_COLLISION_CM) {
+                        collisionState = ANTI_COLLISION_IDLE;
+                        ESP_LOGI(TAG, "Collision avoided -> distance: %.02f", distance);
+                    }
+                }
+            } else {
+                collisionState = ANTI_COLLISION_IDLE;
+            }
+        }
+
+        vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(100));
+    }
+ }
 
 static void taskCleanWheels(void *pvParameters) {
     uint16_t testMotor=0;
@@ -689,7 +735,6 @@ void app_main() {
     xStreamBufferReceiver = xStreamBufferCreate(STREAM_BUFFER_SIZE, STREAM_BUFFER_LENGTH_TRIGGER);
     
     #ifdef HARDWARE_MAINBOARD
-        // newMcbQueueHandler = xQueueCreate(1,sizeof(rx_motor_control_board_t));       // TODO: eliminar
         xTaskCreate(statusLedHandler, "status led handler", 2048, socketConnectionStateQueueHandler, 2, NULL);
     #endif
 
@@ -796,9 +841,10 @@ void app_main() {
     driveControllerInit(driveControllerMotorQueue, driveControllerDataReceiveQueue);
 
     setStatusRobot(STATUS_ROBOT_ARMED);
-    xTaskCreatePinnedToCore(imuControlHandler,"Imu Control",4096,NULL,IMU_HANDLER_PRIORITY,&imuTaskHandler,IMU_HANDLER_CORE);
-    xTaskCreatePinnedToCore(attitudeControl,"attitude control",4096,NULL,ATTITUDE_HANDLER_PRIORITY, NULL,IMU_HANDLER_CORE);
-    xTaskCreatePinnedToCore(commsManager,"communication manager",4096,NULL,COMM_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);
+    xTaskCreatePinnedToCore(imuControlHandler, "Imu Control", 4096, NULL, IMU_HANDLER_PRIORITY,&imuTaskHandler,IMU_HANDLER_CORE);
+    xTaskCreatePinnedToCore(attitudeControl, "attitude control", 4096, NULL, ATTITUDE_HANDLER_PRIORITY, NULL,IMU_HANDLER_CORE);
+    xTaskCreatePinnedToCore(commsManager, "communication manager", 4096, NULL, COMM_HANDLER_PRIORITY,NULL,IMU_HANDLER_CORE);
+    xTaskCreatePinnedToCore(antiCollisionTask, "anti collision task", 4096, NULL, configMAX_PRIORITIES - 5, NULL, COMMS_HANDLER_CORE);
 
     // ESP_LOGI(TAG, "Wifi mode AP");
     // initWifi(ESP_WIFI_SSID_AP, ESP_WIFI_PASS_AP, WIFI_MODE_AP, networkStateQueueHandler);

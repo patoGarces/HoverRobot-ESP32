@@ -6,3 +6,4 @@
 build
 .vscode/settings.json
 dependencies.lock
+managed_components

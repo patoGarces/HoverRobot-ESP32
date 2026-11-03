@@ -158,12 +158,13 @@ robot_local_configs_t convertLocalConfigToFloat(robot_local_configs_raw_t rawCon
             case STATUS_ROBOT_ERROR_TEMP:
             case STATUS_ROBOT_ERROR_IMU:
             case STATUS_ROBOT_ERROR_LIMIT_SPEED:
+            case STATUS_ROBOT_ERROR_LIMIT_ANGLE:
             case STATUS_ROBOT_ERROR_MCB_CONNECTION:
                 color = STATUS_COLOR_ERROR;
             break;
 
             default:
-                ESP_LOGE("updateStatusLed","Error status color unknown");
+                ESP_LOGE("updateStatusLed","Error status color unknown: %d", statusLedColor);
             break;
         };
 
